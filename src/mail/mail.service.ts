@@ -6,6 +6,35 @@ import { SMTP_PRESETS } from './smtp-presets';
 
 export type MailVerificationKind = 'register' | 'find-id' | 'update-email';
 
+export type VerificationTemplate = {
+  subject: string;
+  text: string;
+  html: string;
+};
+
+export type VerificationTemplateArgs = {
+  code: string;
+  validityLabel: string;
+};
+
+export const VERIFICATION_MAIL_TEMPLATE_BY_KIND: Record<MailVerificationKind, VerificationTemplate> = {
+  register: {
+    subject: '[My-drive] 회원가입 이메일 인증번호',
+    text: '인증번호: {{code}}\n유효 시간: {{validityLabel}}\n\n본인이 요청하지 않았다면 이 메일을 무시해 주세요.',
+    html: '<p>인증번호: <strong>{{code}}</strong></p><p>유효 시간: {{validityLabel}}</p><p style="color:#666;font-size:12px">본인이 요청하지 않았다면 이 메일을 무시해 주세요.</p>',
+  },
+  'find-id': {
+    subject: '[My-drive] 아이디 찾기 인증번호',
+    text: '인증번호: {{code}}\n유효 시간: {{validityLabel}}\n\n본인이 요청하지 않았다면 이 메일을 무시해 주세요.',
+    html: '<p>인증번호: <strong>{{code}}</strong></p><p>유효 시간: {{validityLabel}}</p><p style="color:#666;font-size:12px">본인이 요청하지 않았다면 이 메일을 무시해 주세요.</p>',
+  },
+  'update-email': {
+    subject: '[My-drive] 이메일 변경 인증번호',
+    text: '인증번호: {{code}}\n유효 시간: {{validityLabel}}\n\n본인이 요청하지 않았다면 이 메일을 무시해 주세요.',
+    html: '<p>인증번호: <strong>{{code}}</strong></p><p>유효 시간: {{validityLabel}}</p><p style="color:#666;font-size:12px">본인이 요청하지 않았다면 이 메일을 무시해 주세요.</p>',
+  },
+};
+
 function resolveMailFrom(raw: string | undefined, smtpUser: string): string {
   if (!raw) return smtpUser;
   const v = raw.trim();
@@ -81,6 +110,7 @@ export class MailService implements OnModuleInit {
   isSmtpConfigured(): boolean {
     return this.transporter !== null;
   }
+  
 
   async sendVerificationCode(
     to: string,
@@ -91,26 +121,21 @@ export class MailService implements OnModuleInit {
     if (!this.transporter) {
       throw new Error('SMTP is not configured');
     }
-    const subject =
-      kind === 'register'
-        ? '[My-drive] 회원가입 이메일 인증번호'
-        : kind === 'find-id'
-          ? '[My-drive] 아이디 찾기 인증번호'
-          : '[My-drive] 이메일 변경 인증번호';
-    const text = [
-      `인증번호: ${code}`,
-      `유효 시간: ${validityLabel}`,
-      '',
-      '본인이 요청하지 않았다면 이 메일을 무시해 주세요.',
-    ].join('\n');
-    const html = `<p>인증번호: <strong>${code}</strong></p><p>유효 시간: ${validityLabel}</p><p style="color:#666;font-size:12px">본인이 요청하지 않았다면 이 메일을 무시해 주세요.</p>`;
+
+    
+    const { subject, text, html } = VERIFICATION_MAIL_TEMPLATE_BY_KIND[kind];
+    
+    const textContent = text.replace('{{code}}', code).replace('{{validityLabel}}', validityLabel);
+    const htmlContent = html.replace('{{code}}', code).replace('{{validityLabel}}', validityLabel);
+
     await this.transporter.sendMail({
       from: this.fromAddress,
       to,
       subject,
-      text,
-      html,
+      text: textContent,
+      html: htmlContent,
     });
+    
     this.logger.log(`Verification mail sent to ${to} (${kind})`);
   }
 }

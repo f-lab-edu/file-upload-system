@@ -1,6 +1,8 @@
 import { randomInt } from 'node:crypto';
 
 export const PASSWORD_HASH = 10;
+export const PER_SECOND = 1000;
+export const PER_MINUTE = 60_000;
 
 export function random6DigitCode(): string {
   return String(randomInt(100000, 1000000));
@@ -11,16 +13,16 @@ export function random6DigitCode(): string {
     expiresInMinutes: number;
   } {
     return {
-      expiresInSeconds: Math.ceil(ms / 1000),
-      expiresInMinutes: Math.floor(ms / 60_000),
+      expiresInSeconds: Math.ceil(ms / PER_SECOND),
+      expiresInMinutes: Math.floor(ms / PER_MINUTE),
     };
   }
   export function formatCodeValidityForMail(ms: number): string {
-    const sec = Math.ceil(ms / 1000);
-    if (ms < 60_000) {
+    const sec = Math.ceil(ms / PER_SECOND);
+    if (ms < PER_MINUTE) {
       return `${sec}초`;
     }
-    return `${Math.floor(ms / 60_000)}분`;
+    return `${Math.floor(ms / PER_MINUTE)}분`;
   }
 
   

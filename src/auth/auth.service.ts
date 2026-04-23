@@ -39,7 +39,7 @@ import {
   PASSWORD_POLICY_MESSAGE,
 } from './password-policy';
 import { JwtPayload } from './jwt.strategy';
-import { PASSWORD_HASH } from './auth.utils';
+import { PASSWORD_HASH,emailUpdateValidate, passwordUpdateValidate} from './auth.utils';
 
 @Injectable()
 export class AuthService {
@@ -561,69 +561,9 @@ export class AuthService {
       patch.name = name;
     }
 
-    if (dto.email !== undefined) {
-      const email = dto.email.trim().toLowerCase();
-      const me = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { email: true },
-      });
-      if (!me) {
-        throw new BadRequestException('사용자를 찾을 수 없습니다.');
-      }
-      if (email !== me.email) {
-        const token = dto.emailVerifyToken?.trim().toLowerCase();
-        if (
-          !token ||
-          !/^[a-f0-9]{64}$/u.test(token)
-        ) {
-          throw new BadRequestException('이메일 변경은 인증을 완료해 주세요.');
-        }
-        const tokPurp = purposeUpdateEmailToken(userId);
-        const emailSession = await this.prisma.emailVerification.findFirst({
-          where: {
-            email,
-            purpose: tokPurp,
-            code: token,
-            expiresAt: { gt: new Date() },
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-        if (!emailSession) {
-          throw new BadRequestException('이메일 인증을 완료해 주세요.');
-        }
-        const taken = await this.prisma.user.findUnique({
-          where: { email },
-          select: { id: true },
-        });
-        if (taken) {
-          throw new ConflictException('이미 사용 중인 이메일입니다.');
-        }
-        patch.email = email;
-        await this.prisma.emailVerification.deleteMany({
-          where: {
-            OR: [
-              { purpose: purposeUpdateEmailCode(userId) },
-              { purpose: tokPurp },
-            ],
-          },
-        });
-      }
-    }
+    await emailUpdateValidate(this.prisma, userId, dto, patch as { email?: string });
 
-    if (dto.newPassword !== undefined || dto.confirmNewPassword !== undefined) {
-      if (!dto.newPassword || !dto.confirmNewPassword) {
-        throw new BadRequestException(
-          '새 비밀번호와 새 비밀번호 확인을 모두 입력해 주세요.',
-        );
-      }
-      if (dto.newPassword !== dto.confirmNewPassword) {
-        throw new BadRequestException('새 비밀번호가 일치하지 않습니다.');
-      }
-      if (!isPasswordPolicyCompliant(dto.newPassword)) {
-        throw new BadRequestException(PASSWORD_POLICY_MESSAGE);
-      }
-      patch.password = await bcrypt.hash(dto.newPassword, PASSWORD_HASH);
-    }
+    await passwordUpdateValidate(this.prisma, userId, dto, patch as { password?: string });
 
     if (Object.keys(patch).length === 0) {
       throw new BadRequestException('변경할 내용을 입력해 주세요.');

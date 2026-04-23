@@ -39,10 +39,12 @@ import {
   PASSWORD_POLICY_MESSAGE,
 } from './password-policy';
 import { JwtPayload } from './jwt.strategy';
+import { PASSWORD_HASH } from './auth.utils';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  
 
   private formatCodeValidityForMail(ms: number): string {
     const sec = Math.ceil(ms / 1000);
@@ -122,7 +124,7 @@ export class AuthService {
     if (existingId) {
       throw new ConflictException('이미 사용 중인 아이디입니다.');
     }
-    const hash = await bcrypt.hash(dto.password, 10);
+    const hash = await bcrypt.hash(dto.password, PASSWORD_HASH);
     const user = await this.prisma.user.create({
       data: {
         loginId,
@@ -465,7 +467,7 @@ export class AuthService {
         '이전에 사용하던 비밀번호와 동일합니다. 다른 비밀번호를 입력해 주세요.',
       );
     }
-    const hash = await bcrypt.hash(dto.newPassword, 10);
+    const hash = await bcrypt.hash(dto.newPassword, PASSWORD_HASH);
     await this.prisma.user.update({
       where: { id: user.id },
       data: { password: hash },
@@ -620,7 +622,7 @@ export class AuthService {
       if (!isPasswordPolicyCompliant(dto.newPassword)) {
         throw new BadRequestException(PASSWORD_POLICY_MESSAGE);
       }
-      patch.password = await bcrypt.hash(dto.newPassword, 10);
+      patch.password = await bcrypt.hash(dto.newPassword, PASSWORD_HASH);
     }
 
     if (Object.keys(patch).length === 0) {

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomInt } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -356,7 +356,7 @@ export class AuthService {
   }
 
   private random6DigitCode(): string {
-    return String(Math.floor(100000 + Math.random() * 900000));
+    return String(randomInt(100000, 1000000));
   }
 
   async findIdSendCode(dto: FindIdSendDto) {

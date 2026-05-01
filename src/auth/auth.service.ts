@@ -39,6 +39,7 @@ import {
   PASSWORD_POLICY_MESSAGE,
 } from './password-policy';
 import { JwtPayload } from './jwt.strategy';
+import {codeExpiryResponseFields, random6DigitCode} from "./auth.utils";
 
 @Injectable()
 export class AuthService {
@@ -52,15 +53,7 @@ export class AuthService {
     return `${Math.floor(ms / 60_000)}분`;
   }
 
-  private codeExpiryResponseFields(ms: number): {
-    expiresInSeconds: number;
-    expiresInMinutes: number;
-  } {
-    return {
-      expiresInSeconds: Math.ceil(ms / 1000),
-      expiresInMinutes: Math.floor(ms / 60_000),
-    };
-  }
+
 
   constructor(
     private readonly prisma: PrismaService,
@@ -155,7 +148,7 @@ export class AuthService {
     if (taken) {
       throw new ConflictException('이미 사용 중인 이메일입니다.');
     }
-    const code = this.random6DigitCode();
+    const code = random6DigitCode();
     const expiresAt = new Date(Date.now() + REGISTER_CODE_TTL_MS);
     await this.prisma.emailVerification.deleteMany({
       where: {
@@ -167,7 +160,7 @@ export class AuthService {
       data: { email, code, purpose: PURPOSE_REGISTER_CODE, expiresAt },
     });
     const ttlLabel = this.formatCodeValidityForMail(REGISTER_CODE_TTL_MS);
-    const expiry = this.codeExpiryResponseFields(REGISTER_CODE_TTL_MS);
+    const expiry = codeExpiryResponseFields(REGISTER_CODE_TTL_MS);
     if (this.mail.isSmtpConfigured()) {
       try {
         await this.mail.sendVerificationCode(email, code, 'register', ttlLabel);
@@ -256,7 +249,7 @@ export class AuthService {
     }
     const codePurp = purposeUpdateEmailCode(userId);
     const tokPurp = purposeUpdateEmailToken(userId);
-    const code = this.random6DigitCode();
+    const code = random6DigitCode();
     const expiresAt = new Date(Date.now() + REGISTER_CODE_TTL_MS);
     await this.prisma.emailVerification.deleteMany({
       where: {
@@ -267,7 +260,7 @@ export class AuthService {
       data: { email, code, purpose: codePurp, expiresAt },
     });
     const ttlLabel = this.formatCodeValidityForMail(REGISTER_CODE_TTL_MS);
-    const expiry = this.codeExpiryResponseFields(REGISTER_CODE_TTL_MS);
+    const expiry = codeExpiryResponseFields(REGISTER_CODE_TTL_MS);
     if (this.mail.isSmtpConfigured()) {
       try {
         await this.mail.sendVerificationCode(
@@ -355,10 +348,6 @@ export class AuthService {
     return { emailVerifyToken: sessionToken };
   }
 
-  private random6DigitCode(): string {
-    return String(randomInt(100000, 1000000));
-  }
-
   async findIdSendCode(dto: FindIdSendDto) {
     const email = dto.email.trim().toLowerCase();
     const name = dto.name.trim();
@@ -376,7 +365,7 @@ export class AuthService {
       };
     }
 
-    const code = this.random6DigitCode();
+    const code = random6DigitCode();
     const expiresAt = new Date(Date.now() + FIND_ID_CODE_TTL_MS);
     await this.prisma.emailVerification.deleteMany({
       where: { email, purpose: PURPOSE_FIND_LOGIN_ID },
@@ -385,7 +374,7 @@ export class AuthService {
       data: { email, code, purpose: PURPOSE_FIND_LOGIN_ID, expiresAt },
     });
     const ttlLabel = this.formatCodeValidityForMail(FIND_ID_CODE_TTL_MS);
-    const expiry = this.codeExpiryResponseFields(FIND_ID_CODE_TTL_MS);
+    const expiry = codeExpiryResponseFields(FIND_ID_CODE_TTL_MS);
     if (this.mail.isSmtpConfigured()) {
       try {
         await this.mail.sendVerificationCode(email, code, 'find-id', ttlLabel);

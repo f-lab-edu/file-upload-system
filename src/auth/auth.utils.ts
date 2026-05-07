@@ -2,8 +2,8 @@ import { randomInt } from 'node:crypto';
 
 export const PASSWORD_HASH = 10;
 
-export function random6DigitCode(): string {
-  return String(randomInt(100000, 1000000));
+export function randomDigitCode(digits: number): string {
+  return String(randomInt(10 ** (digits - 1), 10 ** digits));
 }
 
   export function codeExpiryResponseFields(ms: number): {

@@ -39,7 +39,7 @@ import {
   PASSWORD_POLICY_MESSAGE,
 } from './password-policy';
 import { JwtPayload } from './jwt.strategy';
-import {codeExpiryResponseFields, random6DigitCode} from "./auth.utils";
+import {codeExpiryResponseFields, randomDigitCode} from "./auth.utils";
 
 @Injectable()
 export class AuthService {
@@ -148,7 +148,7 @@ export class AuthService {
     if (taken) {
       throw new ConflictException('이미 사용 중인 이메일입니다.');
     }
-    const code = random6DigitCode();
+    const code = randomDigitCode(6);
     const expiresAt = new Date(Date.now() + REGISTER_CODE_TTL_MS);
     await this.prisma.emailVerification.deleteMany({
       where: {
@@ -249,7 +249,7 @@ export class AuthService {
     }
     const codePurp = purposeUpdateEmailCode(userId);
     const tokPurp = purposeUpdateEmailToken(userId);
-    const code = random6DigitCode();
+    const code = randomDigitCode(6);
     const expiresAt = new Date(Date.now() + REGISTER_CODE_TTL_MS);
     await this.prisma.emailVerification.deleteMany({
       where: {
@@ -365,7 +365,7 @@ export class AuthService {
       };
     }
 
-    const code = random6DigitCode();
+    const code = randomDigitCode(6);
     const expiresAt = new Date(Date.now() + FIND_ID_CODE_TTL_MS);
     await this.prisma.emailVerification.deleteMany({
       where: { email, purpose: PURPOSE_FIND_LOGIN_ID },

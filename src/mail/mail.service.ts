@@ -125,8 +125,8 @@ export class MailService implements OnModuleInit {
     
     const { subject, text, html } = VERIFICATION_MAIL_TEMPLATE_BY_KIND[kind];
     
-    const textContent = text.replace('{{code}}', code).replace('{{validityLabel}}', validityLabel);
-    const htmlContent = html.replace('{{code}}', code).replace('{{validityLabel}}', validityLabel);
+    const textContent = replacePlaceholders(text,code,validityLabel);
+    const htmlContent = replacePlaceholders(html,code,validityLabel);
 
     await this.transporter.sendMail({
       from: this.fromAddress,
@@ -138,4 +138,8 @@ export class MailService implements OnModuleInit {
     
     this.logger.log(`Verification mail sent to ${to} (${kind})`);
   }
+}
+
+function replacePlaceholders(template: string, code: string, validityLabel: string): string {
+  return template.replace('{{code}}', code).replace('{{validityLabel}}', validityLabel);
 }

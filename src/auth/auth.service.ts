@@ -39,7 +39,7 @@ import {
   PASSWORD_POLICY_MESSAGE,
 } from './password-policy';
 import { JwtPayload } from './jwt.strategy';
-import { PASSWORD_HASH,emailUpdateValidate, passwordUpdateValidate} from './auth.utils';
+import {PASSWORD_HASH, validateEmailUpdate, validatePasswordUpdate} from './auth.utils';
 
 @Injectable()
 export class AuthService {
@@ -561,9 +561,9 @@ export class AuthService {
       patch.name = name;
     }
 
-    await emailUpdateValidate(this.prisma, userId, dto, patch as { email?: string });
+    await validateEmailUpdate(this.prisma, userId, dto, patch as { email?: string });
 
-    await passwordUpdateValidate(this.prisma, userId, dto, patch as { password?: string });
+    await validatePasswordUpdate(this.prisma, userId, dto, patch as { password?: string });
 
     if (Object.keys(patch).length === 0) {
       throw new BadRequestException('변경할 내용을 입력해 주세요.');

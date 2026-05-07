@@ -32,7 +32,7 @@ export function random6DigitCode(): string {
     return `${Math.floor(ms / PER_MINUTE)}분`;
   }
 
-  export async function  emailUpdateValidate(prisma: PrismaService, userId: string, dto: UpdateMeDto, patch: { email?: string },): Promise<void> {
+  export async function  validateEmailUpdate(prisma: PrismaService, userId: string, dto: UpdateMeDto, patch: { email?: string },): Promise<void> {
     if (dto.email !== undefined) {
         const email = dto.email.trim().toLowerCase();
         const me = await prisma.user.findUnique({
@@ -83,7 +83,7 @@ export function random6DigitCode(): string {
       }
   }
 
-  export async function passwordUpdateValidate(prisma: PrismaService, userId: string, dto: UpdateMeDto, patch: { password?: string },): Promise<void> {
+  export async function validatePasswordUpdate(prisma: PrismaService, userId: string, dto: UpdateMeDto, patch: { password?: string },): Promise<void> {
     if (dto.newPassword !== undefined || dto.confirmNewPassword !== undefined) {
         if (!dto.newPassword || !dto.confirmNewPassword) {
           throw new BadRequestException(

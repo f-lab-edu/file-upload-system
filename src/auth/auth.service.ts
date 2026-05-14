@@ -73,16 +73,10 @@ export class AuthService {
     }
 
     /** 회원가입 전 아이디 사용 가능 여부 (공개) */
-    async checkRegisterLoginIdAvailability(raw: string): Promise<{ available: boolean }> {
-        const loginId = raw.trim().toLowerCase();
+    async checkRegisterLoginIdAvailability(loginId: string): Promise<{ available: boolean }> {
+        // const loginId = raw.trim().toLowerCase();
         if (!loginId) {
             throw new BadRequestException('아이디를 입력해 주세요.');
-        }
-        if (loginId.length < 4 || loginId.length > 20) {
-            throw new BadRequestException('아이디는 4~20자여야 합니다.');
-        }
-        if (!/^[a-zA-Z0-9_]+$/.test(loginId)) {
-            throw new BadRequestException('아이디 형식이 올바르지 않습니다.');
         }
         const existing = await this.prisma.user.findUnique({
             where: {loginId},
@@ -98,8 +92,8 @@ export class AuthService {
         if (!isPasswordPolicyCompliant(dto.password)) {
             throw new BadRequestException(PASSWORD_POLICY_MESSAGE);
         }
-        const email = dto.email.trim().toLowerCase();
-        const loginId = dto.loginId.trim().toLowerCase();
+        const email = dto.email;
+        const loginId = dto.loginId;
         const token = dto.emailVerifyToken.trim().toLowerCase();
         const emailSession = await this.prisma.emailVerification.findFirst({
             where: {

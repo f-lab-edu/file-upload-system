@@ -8,26 +8,25 @@ import {MailService} from 'src/mail/mail.service';
 import {DriveService} from 'src/drive/drive.service';
 
 describe('AuthService', () => {
+    let service: AuthService;
+    let prisma: DeepMockProxy<PrismaService>;
+
+    beforeEach(async () => {
+        prisma = mockDeep<PrismaService>();
+
+        const module: TestingModule = await Test.createTestingModule({
+            providers: [
+                AuthService,
+                {provide: PrismaService, useValue: prisma},
+                {provide: JwtService, useValue: mockDeep<JwtService>()},
+                {provide: MailService, useValue: mockDeep<MailService>()},
+                {provide: DriveService, useValue: mockDeep<DriveService>()},
+            ],
+        }).compile();
+
+        service = module.get<AuthService>(AuthService);
+    });
     describe('register', () => {
-        let service: AuthService;
-        let prisma: DeepMockProxy<PrismaService>;
-
-        beforeEach(async () => {
-            prisma = mockDeep<PrismaService>();
-
-            const module: TestingModule = await Test.createTestingModule({
-                providers: [
-                    AuthService,
-                    {provide: PrismaService, useValue: prisma},
-                    {provide: JwtService, useValue: mockDeep<JwtService>()},
-                    {provide: MailService, useValue: mockDeep<MailService>()},
-                    {provide: DriveService, useValue: mockDeep<DriveService>()},
-                ],
-            }).compile();
-
-            service = module.get<AuthService>(AuthService);
-        });
-
         it('비밀번호와 비밀번호 확인이 다르면 BadRequestException을 던진다', async () => {
             await expect(
                 service.register({
@@ -43,4 +42,15 @@ describe('AuthService', () => {
             expect(prisma.emailVerification.findFirst).not.toHaveBeenCalled();
         });
     })
+    describe('checkRegisterLoginIdAvailability', () => {
+        it('아이디가 비어 있으면 BadRequestException을 던지고 DB를 조회하지 않는다', async () => {
+            await expect(
+                service.checkRegisterLoginIdAvailability(''),
+            ).rejects.toThrow(BadRequestException);
+            await expect(
+                service.checkRegisterLoginIdAvailability(''),
+            ).rejects.toThrow('아이디를 입력해 주세요.');
+            expect(prisma.user.findUnique).not.toHaveBeenCalled();
+        });
+    });
 });

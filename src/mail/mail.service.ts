@@ -6,33 +6,16 @@ import { SMTP_PRESETS } from './smtp-presets';
 
 export type MailVerificationKind = 'register' | 'find-id' | 'update-email';
 
-export type VerificationTemplate = {
-  subject: string;
-  text: string;
-  html: string;
-};
+const VERIFICATION_MAIL_TEXT =
+  '인증번호: {{code}}\n유효 시간: {{validityLabel}}\n\n본인이 요청하지 않았다면 이 메일을 무시해 주세요.';
 
-export type VerificationTemplateArgs = {
-  code: string;
-  validityLabel: string;
-};
+const VERIFICATION_MAIL_HTML =
+  '<p>인증번호: <strong>{{code}}</strong></p><p>유효 시간: {{validityLabel}}</p><p style="color:#666;font-size:12px">본인이 요청하지 않았다면 이 메일을 무시해 주세요.</p>';
 
-export const VERIFICATION_MAIL_TEMPLATE_BY_KIND: Record<MailVerificationKind, VerificationTemplate> = {
-  register: {
-    subject: '[My-drive] 회원가입 이메일 인증번호',
-    text: '인증번호: {{code}}\n유효 시간: {{validityLabel}}\n\n본인이 요청하지 않았다면 이 메일을 무시해 주세요.',
-    html: '<p>인증번호: <strong>{{code}}</strong></p><p>유효 시간: {{validityLabel}}</p><p style="color:#666;font-size:12px">본인이 요청하지 않았다면 이 메일을 무시해 주세요.</p>',
-  },
-  'find-id': {
-    subject: '[My-drive] 아이디 찾기 인증번호',
-    text: '인증번호: {{code}}\n유효 시간: {{validityLabel}}\n\n본인이 요청하지 않았다면 이 메일을 무시해 주세요.',
-    html: '<p>인증번호: <strong>{{code}}</strong></p><p>유효 시간: {{validityLabel}}</p><p style="color:#666;font-size:12px">본인이 요청하지 않았다면 이 메일을 무시해 주세요.</p>',
-  },
-  'update-email': {
-    subject: '[My-drive] 이메일 변경 인증번호',
-    text: '인증번호: {{code}}\n유효 시간: {{validityLabel}}\n\n본인이 요청하지 않았다면 이 메일을 무시해 주세요.',
-    html: '<p>인증번호: <strong>{{code}}</strong></p><p>유효 시간: {{validityLabel}}</p><p style="color:#666;font-size:12px">본인이 요청하지 않았다면 이 메일을 무시해 주세요.</p>',
-  },
+export const VERIFICATION_MAIL_SUBJECT_BY_KIND: Record<MailVerificationKind, string> = {
+  register: '[My-drive] 회원가입 이메일 인증번호',
+  'find-id': '[My-drive] 아이디 찾기 인증번호',
+  'update-email': '[My-drive] 이메일 변경 인증번호',
 };
 
 function resolveMailFrom(raw: string | undefined, smtpUser: string): string {
@@ -123,10 +106,10 @@ export class MailService implements OnModuleInit {
     }
 
     
-    const { subject, text, html } = VERIFICATION_MAIL_TEMPLATE_BY_KIND[kind];
+    const subject = VERIFICATION_MAIL_SUBJECT_BY_KIND[kind];
     
-    const textContent = replacePlaceholders(text,code,validityLabel);
-    const htmlContent = replacePlaceholders(html,code,validityLabel);
+    const textContent = replacePlaceholders(VERIFICATION_MAIL_TEXT,code,validityLabel);
+    const htmlContent = replacePlaceholders(VERIFICATION_MAIL_HTML,code,validityLabel);
 
     await this.transporter.sendMail({
       from: this.fromAddress,

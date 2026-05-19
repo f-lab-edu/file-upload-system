@@ -39,7 +39,7 @@ import {
   PASSWORD_POLICY_MESSAGE,
 } from './password-policy';
 import { JwtPayload } from './jwt.strategy';
-import {PASSWORD_HASH, validateEmailUpdate, validatePasswordUpdate} from './auth.utils';
+import {PASSWORD_HASH, PASSWORD_HASH, PER_SECOND, PER_MINUTE, validateEmailUpdate, validatePasswordUpdate} from './auth.utils';
 
 @Injectable()
 export class AuthService {
@@ -47,11 +47,11 @@ export class AuthService {
   
 
   private formatCodeValidityForMail(ms: number): string {
-    const sec = Math.ceil(ms / 1000);
-    if (ms < 60_000) {
+    const sec = Math.ceil(ms / PER_SECOND);
+    if (ms < PER_MINUTE) {
       return `${sec}초`;
     }
-    return `${Math.floor(ms / 60_000)}분`;
+    return `${Math.floor(ms / PER_MINUTE)}분`;
   }
 
   private codeExpiryResponseFields(ms: number): {
@@ -59,8 +59,8 @@ export class AuthService {
     expiresInMinutes: number;
   } {
     return {
-      expiresInSeconds: Math.ceil(ms / 1000),
-      expiresInMinutes: Math.floor(ms / 60_000),
+      expiresInSeconds: Math.ceil(ms / PER_SECOND),
+      expiresInMinutes: Math.floor(ms / PER_MINUTE),
     };
   }
 

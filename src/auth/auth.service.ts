@@ -39,7 +39,7 @@ import {
   PASSWORD_POLICY_MESSAGE,
 } from './password-policy';
 import { JwtPayload } from './jwt.strategy';
-import {PASSWORD_HASH, PASSWORD_HASH, PER_SECOND, PER_MINUTE, validateEmailUpdate, validatePasswordUpdate, codeExpiryResponseFields, randomDigitCode} from './auth.utils';
+import {PASSWORD_HASH, PER_SECOND, PER_MINUTE, validateEmailUpdate, validatePasswordUpdate, codeExpiryResponseFields, randomDigitCode} from './auth.utils';
 
 @Injectable()
 export class AuthService {

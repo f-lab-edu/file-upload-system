@@ -125,30 +125,32 @@ export class AuthService {
       throw new ConflictException('이미 사용 중인 아이디입니다.');
     }
     const hash = await bcrypt.hash(dto.password, PASSWORD_HASH);
-    const user = await this.prisma.user.create({
-      data: {
-        loginId,
-        email,
-        password: hash,
-        name: dto.name.trim(),
-      },
-      select: {
-        id: true,
-        loginId: true,
-        email: true,
-        name: true,
-        createdAt: true,
-      },
+    return await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          loginId,
+          email,
+          password: hash,
+          name: dto.name.trim(),
+        },
+        select: {
+          id: true,
+          loginId: true,
+          email: true,
+          name: true,
+          createdAt: true,
+        },
+      });
+      await tx.emailVerification.deleteMany({
+        where: {
+          email,
+          purpose: { in: [PURPOSE_REGISTER_CODE, PURPOSE_REGISTER_TOKEN] },
+        },
+      });
+      const accessToken = this.signToken(user.id, user.email);
+      const refreshToken = await this.grantRefreshToken(user.id, true);
+      return { user, accessToken, refreshToken };
     });
-    await this.prisma.emailVerification.deleteMany({
-      where: {
-        email,
-        purpose: { in: [PURPOSE_REGISTER_CODE, PURPOSE_REGISTER_TOKEN] },
-      },
-    });
-    const accessToken = this.signToken(user.id, user.email);
-    const refreshToken = await this.grantRefreshToken(user.id, true);
-    return { user, accessToken, refreshToken };
   }
 
   async registerSendCode(dto: RegisterSendCodeDto) {

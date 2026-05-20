@@ -5,18 +5,13 @@ import {
   Get,
   Patch,
   Post,
-  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { RefreshSessionDto } from './dto/refresh-session.dto';
 import { FindIdSendDto } from './dto/find-id-send.dto';
 import { FindIdVerifyDto } from './dto/find-id-verify.dto';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from '../register/dto/register.dto';
-import { RegisterSendCodeDto } from '../register/dto/register-send-code.dto';
-import { RegisterVerifyCodeDto } from '../register/dto/register-verify-code.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UpdateMeEmailSendDto } from './dto/update-me-email-send.dto';
@@ -31,35 +26,9 @@ type AuthedRequest = {
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  /** 슬래시 없는 경로: Express 5 + 정적 호스팅 환경에서 `/register/...` 미매칭 이슈 회피 */
-  @Post(['register-send-code', 'register/send-code'])
-  registerSendCode(@Body() dto: RegisterSendCodeDto) {
-    return this.auth.registerSendCode(dto);
-  }
-
-  @Post(['register-verify-code', 'register/verify-code'])
-  registerVerifyCode(@Body() dto: RegisterVerifyCodeDto) {
-    return this.auth.registerVerifyCode(dto);
-  }
-
-  @Get('register/check-login-id')
-  checkRegisterLoginId(@Query('loginId') dto: RegisterDto) {
-    return this.auth.checkRegisterLoginIdAvailability(dto.loginId ?? '');
-  }
-
-  @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.auth.register(dto);
-  }
-
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
-  }
-
-  @Post('refresh')
-  refresh(@Body() dto: RefreshSessionDto) {
-    return this.auth.refreshSession(dto.refreshToken);
   }
 
   @Post('find-id/send-code')

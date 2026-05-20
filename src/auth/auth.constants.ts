@@ -7,8 +7,6 @@ export const FIND_ID_CODE_TTL_MS = 30 * 1000;
 export const REGISTER_CODE_TTL_MS = 30 * 1000;
 export const REGISTER_TOKEN_TTL_MS = 30 * 60 * 1000;
 
-
-
 /** 마이페이지 이메일 변경: 사용자별로 purpose에 userId를 붙여 구분 */
 export function purposeUpdateEmailCode(userId: string): string {
   return `UPDATE_EMAIL_CODE:${userId}`;

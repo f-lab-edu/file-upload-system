@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import {
   BadRequestException,
   ConflictException,
@@ -6,9 +9,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DriveItem, DriveItemType } from '@prisma/client';
-import { randomUUID } from 'crypto';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFolderDto } from './dto/create-folder.dto';
 
@@ -22,7 +22,9 @@ export function isImageMime(mime: string | null | undefined): boolean {
  */
 function decodeUploadedFilename(raw: string): string {
   if (!raw) return 'unnamed';
-  const latin1Decoded = Buffer.from(raw, 'latin1').toString('utf8').normalize('NFC');
+  const latin1Decoded = Buffer.from(raw, 'latin1')
+    .toString('utf8')
+    .normalize('NFC');
   const hasReplacement = latin1Decoded.includes('\uFFFD');
   if (hasReplacement) return raw;
   const sourceLooksMojibake = /[ÃÐÁ¢À-ÿ]/.test(raw);
@@ -135,7 +137,9 @@ export class DriveService {
     }
     const isImage = isImageMime(file.mimetype);
     if (section === 'images' && !isImage) {
-      throw new BadRequestException('이미지 페이지에서는 이미지 파일만 업로드할 수 있습니다.');
+      throw new BadRequestException(
+        '이미지 페이지에서는 이미지 파일만 업로드할 수 있습니다.',
+      );
     }
     const name = decodeUploadedFilename(file.originalname || 'unnamed');
     await this.assertUniqueName(userId, resolvedParentId, name);
@@ -166,7 +170,9 @@ export class DriveService {
       throw new NotFoundException('항목을 찾을 수 없습니다.');
     }
     if (isSystemSectionRootFolder(item)) {
-      throw new BadRequestException('문서·이미지 루트 폴더는 삭제할 수 없습니다.');
+      throw new BadRequestException(
+        '문서·이미지 루트 폴더는 삭제할 수 없습니다.',
+      );
     }
 
     if (item.type === DriveItemType.FILE) {
@@ -184,7 +190,9 @@ export class DriveService {
       where: { userId, id: { in: subtreeIds } },
       select: { id: true, type: true },
     });
-    const fileIds = rows.filter((r) => r.type === DriveItemType.FILE).map((r) => r.id);
+    const fileIds = rows
+      .filter((r) => r.type === DriveItemType.FILE)
+      .map((r) => r.id);
     const deletedAt = new Date();
     const purgeAt = new Date(deletedAt.getTime() + TRASH_RETENTION_MS);
 
@@ -214,7 +222,9 @@ export class DriveService {
       select: { storageKey: true },
     });
     const keys = rows.map((r) => r.storageKey).filter((k): k is string => !!k);
-    await this.prisma.driveItem.deleteMany({ where: { userId, id: { in: ids } } });
+    await this.prisma.driveItem.deleteMany({
+      where: { userId, id: { in: ids } },
+    });
     for (const key of keys) {
       try {
         await fs.unlink(this.filePath(userId, key));
@@ -241,7 +251,9 @@ export class DriveService {
     }
     const ids = items.map((x) => x.id);
     const keys = items.map((x) => x.storageKey).filter((k): k is string => !!k);
-    await this.prisma.driveItem.deleteMany({ where: { userId, id: { in: ids } } });
+    await this.prisma.driveItem.deleteMany({
+      where: { userId, id: { in: ids } },
+    });
     for (const key of keys) {
       try {
         await fs.unlink(this.filePath(userId, key));
@@ -310,8 +322,12 @@ export class DriveService {
     });
     if (!expired.length) return;
     const ids = expired.map((x) => x.id);
-    const keys = expired.map((x) => x.storageKey).filter((x): x is string => !!x);
-    await this.prisma.driveItem.deleteMany({ where: { userId, id: { in: ids } } });
+    const keys = expired
+      .map((x) => x.storageKey)
+      .filter((x): x is string => !!x);
+    await this.prisma.driveItem.deleteMany({
+      where: { userId, id: { in: ids } },
+    });
     for (const key of keys) {
       try {
         await fs.unlink(this.filePath(userId, key));
@@ -321,7 +337,10 @@ export class DriveService {
     }
   }
 
-  private async collectSubtreeIds(userId: string, rootId: string): Promise<string[]> {
+  private async collectSubtreeIds(
+    userId: string,
+    rootId: string,
+  ): Promise<string[]> {
     const root = await this.prisma.driveItem.findFirst({
       where: { id: rootId, userId, deletedAt: null },
       select: { id: true },
@@ -355,7 +374,9 @@ export class DriveService {
       return this.moveTrashedItem(userId, item, newParentId);
     }
     if (isSystemSectionRootFolder(item)) {
-      throw new BadRequestException('문서·이미지 루트 폴더는 이동할 수 없습니다.');
+      throw new BadRequestException(
+        '문서·이미지 루트 폴더는 이동할 수 없습니다.',
+      );
     }
     if (newParentId) {
       const parent = await this.assertFolderOwned(userId, newParentId);
@@ -379,7 +400,9 @@ export class DriveService {
     newParentId: string | null,
   ) {
     if (isSystemSectionRootFolder(item)) {
-      throw new BadRequestException('문서·이미지 루트 폴더는 이동할 수 없습니다.');
+      throw new BadRequestException(
+        '문서·이미지 루트 폴더는 이동할 수 없습니다.',
+      );
     }
     if (newParentId) {
       const parent = await this.assertFolderOwned(userId, newParentId);
@@ -476,7 +499,11 @@ export class DriveService {
     return false;
   }
 
-  async getFileForUser(userId: string, id: string, allowDeleted = false): Promise<DriveItem> {
+  async getFileForUser(
+    userId: string,
+    id: string,
+    allowDeleted = false,
+  ): Promise<DriveItem> {
     await this.purgeExpiredTrash(userId);
     const item = await this.prisma.driveItem.findFirst({
       where: {
@@ -486,13 +513,17 @@ export class DriveService {
         ...(allowDeleted ? {} : { deletedAt: null }),
       },
     });
-    if (!item || !item.storageKey) {
+    if (!item?.storageKey) {
       throw new NotFoundException('파일을 찾을 수 없습니다.');
     }
     return item;
   }
 
-  async readFileBuffer(userId: string, id: string, allowDeleted = false): Promise<Buffer> {
+  async readFileBuffer(
+    userId: string,
+    id: string,
+    allowDeleted = false,
+  ): Promise<Buffer> {
     const item = await this.getFileForUser(userId, id, allowDeleted);
     const p = this.filePath(userId, item.storageKey!);
     return fs.readFile(p);
@@ -503,7 +534,12 @@ export class DriveService {
     folderId: string,
   ): Promise<DriveItem> {
     const folder = await this.prisma.driveItem.findFirst({
-      where: { id: folderId, userId, type: DriveItemType.FOLDER, deletedAt: null },
+      where: {
+        id: folderId,
+        userId,
+        type: DriveItemType.FOLDER,
+        deletedAt: null,
+      },
     });
     if (!folder) {
       throw new NotFoundException('폴더를 찾을 수 없습니다.');

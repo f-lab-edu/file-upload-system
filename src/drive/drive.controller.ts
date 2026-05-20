@@ -19,10 +19,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { DriveService, isImageMime } from './drive.service';
 import { CreateFolderDto } from './dto/create-folder.dto';
 import { MoveItemDto } from './dto/move-item.dto';
 import { RenameItemDto } from './dto/rename-item.dto';
-import { DriveService, isImageMime } from './drive.service';
 
 type AuthedRequest = {
   user: { id: string; email: string; name: string | null };
@@ -77,8 +77,14 @@ export class DriveController {
     if (pid && !this.isUuid(pid)) {
       throw new BadRequestException('parentId가 올바르지 않습니다.');
     }
-    const uploadSection: 'docs' | 'images' = section === 'images' ? 'images' : 'docs';
-    const created = await this.drive.uploadFile(req.user.id, file, pid, uploadSection);
+    const uploadSection: 'docs' | 'images' =
+      section === 'images' ? 'images' : 'docs';
+    const created = await this.drive.uploadFile(
+      req.user.id,
+      file,
+      pid,
+      uploadSection,
+    );
     return {
       ...created,
       isImage: isImageMime(created.mimeType),

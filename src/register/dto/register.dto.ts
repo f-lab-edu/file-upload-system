@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsEmail,
   IsString,
@@ -10,7 +11,6 @@ import {
   PASSWORD_POLICY_MESSAGE,
   PASSWORD_POLICY_REGEX,
 } from '../../auth/password-policy';
-import { Transform } from 'class-transformer';
 
 export class RegisterDto {
   @IsString()

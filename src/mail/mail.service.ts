@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
+import * as nodemailer from 'nodemailer';
 import { SMTP_PRESETS } from './smtp-presets';
 
 export type MailVerificationKind = 'register' | 'find-id' | 'update-email';
@@ -12,7 +12,10 @@ const VERIFICATION_MAIL_TEXT =
 const VERIFICATION_MAIL_HTML =
   '<p>인증번호: <strong>{{code}}</strong></p><p>유효 시간: {{validityLabel}}</p><p style="color:#666;font-size:12px">본인이 요청하지 않았다면 이 메일을 무시해 주세요.</p>';
 
-export const VERIFICATION_MAIL_SUBJECT_BY_KIND: Record<MailVerificationKind, string> = {
+export const VERIFICATION_MAIL_SUBJECT_BY_KIND: Record<
+  MailVerificationKind,
+  string
+> = {
   register: '[My-drive] 회원가입 이메일 인증번호',
   'find-id': '[My-drive] 아이디 찾기 인증번호',
   'update-email': '[My-drive] 이메일 변경 인증번호',
@@ -51,7 +54,7 @@ export class MailService implements OnModuleInit {
     const port =
       portExplicit !== undefined && portExplicit !== ''
         ? Number(portExplicit)
-        : preset?.port ?? 587;
+        : (preset?.port ?? 587);
     const secureEnv = this.config.get<string>('SMTP_SECURE');
     const secure =
       secureEnv === 'true' || secureEnv === '1'
@@ -93,7 +96,6 @@ export class MailService implements OnModuleInit {
   isSmtpConfigured(): boolean {
     return this.transporter !== null;
   }
-  
 
   async sendVerificationCode(
     to: string,
@@ -105,11 +107,18 @@ export class MailService implements OnModuleInit {
       throw new Error('SMTP is not configured');
     }
 
-    
     const subject = VERIFICATION_MAIL_SUBJECT_BY_KIND[kind];
-    
-    const textContent = replacePlaceholders(VERIFICATION_MAIL_TEXT,code,validityLabel);
-    const htmlContent = replacePlaceholders(VERIFICATION_MAIL_HTML,code,validityLabel);
+
+    const textContent = replacePlaceholders(
+      VERIFICATION_MAIL_TEXT,
+      code,
+      validityLabel,
+    );
+    const htmlContent = replacePlaceholders(
+      VERIFICATION_MAIL_HTML,
+      code,
+      validityLabel,
+    );
 
     await this.transporter.sendMail({
       from: this.fromAddress,
@@ -118,11 +127,17 @@ export class MailService implements OnModuleInit {
       text: textContent,
       html: htmlContent,
     });
-    
+
     this.logger.log(`Verification mail sent to ${to} (${kind})`);
   }
 }
 
-function replacePlaceholders(template: string, code: string, validityLabel: string): string {
-  return template.replace('{{code}}', code).replace('{{validityLabel}}', validityLabel);
+function replacePlaceholders(
+  template: string,
+  code: string,
+  validityLabel: string,
+): string {
+  return template
+    .replace('{{code}}', code)
+    .replace('{{validityLabel}}', validityLabel);
 }

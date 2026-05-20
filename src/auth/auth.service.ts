@@ -147,6 +147,34 @@ export class AuthService {
         })
 
     }
+    const hash = await bcrypt.hash(dto.password, PASSWORD_HASH);
+    return await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          loginId,
+          email,
+          password: hash,
+          name: dto.name.trim(),
+        },
+        select: {
+          id: true,
+          loginId: true,
+          email: true,
+          name: true,
+          createdAt: true,
+        },
+      });
+      await tx.emailVerification.deleteMany({
+        where: {
+          email,
+          purpose: { in: [PURPOSE_REGISTER_CODE, PURPOSE_REGISTER_TOKEN] },
+        },
+      });
+      const accessToken = this.signToken(user.id, user.email);
+      const refreshToken = await this.grantRefreshToken(user.id, true);
+      return { user, accessToken, refreshToken };
+    });
+  }
 
   async registerSendCode(dto: RegisterSendCodeDto) {
     const email = dto.email.trim().toLowerCase();

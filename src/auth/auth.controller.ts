@@ -43,8 +43,8 @@ export class AuthController {
   }
 
   @Get('register/check-login-id')
-  checkRegisterLoginId(@Query('loginId') loginId: string) {
-    return this.auth.checkRegisterLoginIdAvailability(loginId ?? '');
+  checkRegisterLoginId(@Query('loginId') dto: RegisterDto) {
+    return this.auth.checkRegisterLoginIdAvailability(dto.loginId ?? '');
   }
 
   @Post('register')

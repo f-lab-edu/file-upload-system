@@ -9,7 +9,7 @@ import {
 import {
   PASSWORD_POLICY_MESSAGE,
   PASSWORD_POLICY_REGEX,
-} from '../password-policy';
+} from '../../auth/password-policy';
 import { Transform } from 'class-transformer';
 
 export class RegisterDto {

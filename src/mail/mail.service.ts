@@ -21,6 +21,10 @@ export const VERIFICATION_MAIL_SUBJECT_BY_KIND: Record<
   'update-email': '[My-drive] 이메일 변경 인증번호',
 };
 
+function isProductionEnv(nodeEnv: string | undefined): boolean {
+  return nodeEnv === 'production';
+}
+
 function resolveMailFrom(raw: string | undefined, smtpUser: string): string {
   if (!raw) return smtpUser;
   const v = raw.trim();
@@ -36,8 +40,12 @@ export class MailService implements OnModuleInit {
   private readonly fromAddress: string;
   private readonly resolvedHost: string;
   private readonly resolvedPort: number;
+  private readonly nodeEnv: string;
+  private readonly mailSendingEnabled: boolean;
 
   constructor(private readonly config: ConfigService) {
+    this.nodeEnv = process.env.NODE_ENV ?? 'development';
+    this.mailSendingEnabled = isProductionEnv(this.nodeEnv);
     const user = this.config.get<string>('SMTP_USER')?.trim();
     const pass = this.config.get<string>('SMTP_PASS')?.trim();
     const fromRaw = this.config.get<string>('MAIL_FROM')?.trim();
@@ -81,6 +89,10 @@ export class MailService implements OnModuleInit {
   }
 
   onModuleInit(): void {
+    if (!this.mailSendingEnabled) {
+      this.logger.log(`NODE_ENV=${this.nodeEnv} — 메일 발송 비활성.`);
+      return;
+    }
     if (this.transporter) {
       this.logger.log(
         `SMTP 사용 중 — ${this.resolvedHost}:${this.resolvedPort} (인증번호는 메일로 발송됩니다)`,
@@ -92,9 +104,9 @@ export class MailService implements OnModuleInit {
     }
   }
 
-  /** 발송용 SMTP가 구성되어 있으면 true */
+  /** prd 이고 발송용 SMTP가 구성되어 있으면 true */
   isSmtpConfigured(): boolean {
-    return this.transporter !== null;
+    return this.mailSendingEnabled && this.transporter !== null;
   }
 
   async sendVerificationCode(

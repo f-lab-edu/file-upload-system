@@ -19,14 +19,11 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import type { AuthedRequest } from '../auth/types/authed-request.type';
 import { DriveService, isImageMime } from './drive.service';
 import { CreateFolderDto } from './dto/create-folder.dto';
 import { MoveItemDto } from './dto/move-item.dto';
 import { RenameItemDto } from './dto/rename-item.dto';
-
-type AuthedRequest = {
-  user: { id: string; email: string; name: string | null };
-};
 
 @Controller('api/drive')
 @UseGuards(JwtAuthGuard)

@@ -35,11 +35,7 @@ export class DriveController {
 
   @Get('items')
   async list(@Req() req: AuthedRequest, @Query('parentId') parentId?: string) {
-    const pid = parentId === undefined || parentId === '' ? null : parentId;
-    if (pid && !this.isUuid(pid)) {
-      throw new BadRequestException('parentId가 올바르지 않습니다.');
-    }
-    return this.drive.list(req.user.id, pid);
+    return this.drive.list(req.user.id, this.resolveParentId(parentId));
   }
 
   @Get('trash')
@@ -73,16 +69,12 @@ export class DriveController {
     if (!file) {
       throw new BadRequestException('파일이 필요합니다.');
     }
-    const pid = parentId === undefined || parentId === '' ? null : parentId;
-    if (pid && !this.isUuid(pid)) {
-      throw new BadRequestException('parentId가 올바르지 않습니다.');
-    }
     const uploadSection: 'docs' | 'images' =
       section === 'images' ? 'images' : 'docs';
     const created = await this.drive.uploadFile(
       req.user.id,
       file,
-      pid,
+      this.resolveParentId(parentId),
       uploadSection,
     );
     return {
@@ -113,12 +105,7 @@ export class DriveController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: MoveItemDto,
   ) {
-    const nextParent =
-      dto.parentId === undefined || dto.parentId === '' ? null : dto.parentId;
-    if (nextParent && !this.isUuid(nextParent)) {
-      throw new BadRequestException('parentId가 올바르지 않습니다.');
-    }
-    return this.drive.moveItem(req.user.id, id, nextParent);
+    return this.drive.moveItem(req.user.id, id, this.resolveParentId(dto.parentId));
   }
 
   @Patch('items/:id/rename')
@@ -146,9 +133,11 @@ export class DriveController {
     res.send(buf);
   }
 
-  private isUuid(v: string) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      v,
-    );
+  private resolveParentId(raw: string | null | undefined): string | null {
+    if (raw === undefined || raw === null || raw === '') return null;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) {
+      throw new BadRequestException('parentId가 올바르지 않습니다.');
+    }
+    return raw;
   }
 }

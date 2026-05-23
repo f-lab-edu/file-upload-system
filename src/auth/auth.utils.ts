@@ -48,7 +48,7 @@ export async function emailUpdateValidate(
 ): Promise<void> {
   if (dto.email !== undefined) {
     const email = dto.email.trim().toLowerCase();
-    const me = await this.prisma.user.findUnique({
+    const me = await prisma.user.findUnique({
       where: { id: userId },
       select: { email: true },
     });
@@ -61,7 +61,7 @@ export async function emailUpdateValidate(
         throw new BadRequestException('이메일 변경은 인증을 완료해 주세요.');
       }
       const tokPurp = purposeUpdateEmailToken(userId);
-      const emailSession = await this.prisma.emailVerification.findFirst({
+      const emailSession = await prisma.emailVerification.findFirst({
         where: {
           email,
           purpose: tokPurp,
@@ -73,7 +73,7 @@ export async function emailUpdateValidate(
       if (!emailSession) {
         throw new BadRequestException('이메일 인증을 완료해 주세요.');
       }
-      const taken = await this.prisma.user.findUnique({
+      const taken = await prisma.user.findUnique({
         where: { email },
         select: { id: true },
       });
@@ -81,7 +81,7 @@ export async function emailUpdateValidate(
         throw new ConflictException('이미 사용 중인 이메일입니다.');
       }
       patch.email = email;
-      await this.prisma.emailVerification.deleteMany({
+      await prisma.emailVerification.deleteMany({
         where: {
           OR: [
             { purpose: purposeUpdateEmailCode(userId) },

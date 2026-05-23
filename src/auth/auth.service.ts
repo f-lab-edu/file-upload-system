@@ -7,7 +7,6 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { DriveService } from '../drive/drive.service';
 import { MailService } from '../mail/mail.service';
@@ -62,7 +61,6 @@ export class AuthService {
 
   constructor(
     private readonly prisma: PrismaService,
-    readonly _jwt: JwtService,
     private readonly mail: MailService,
     private readonly drive: DriveService,
     private readonly token: TokenService,

@@ -105,7 +105,11 @@ export class DriveController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: MoveItemDto,
   ) {
-    return this.drive.moveItem(req.user.id, id, this.resolveParentId(dto.parentId));
+    return this.drive.moveItem(
+      req.user.id,
+      id,
+      this.resolveParentId(dto.parentId),
+    );
   }
 
   @Patch('items/:id/rename')
@@ -134,8 +138,12 @@ export class DriveController {
   }
 
   private resolveParentId(raw: string | null | undefined): string | null {
-    if (raw === undefined || raw === null || raw === '') return null;
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) {
+    if (!raw) return null;
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        raw,
+      )
+    ) {
       throw new BadRequestException('parentId가 올바르지 않습니다.');
     }
     return raw;

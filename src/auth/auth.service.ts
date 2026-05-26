@@ -24,6 +24,9 @@ import {
   emailUpdateValidate,
   PASSWORD_HASH,
   passwordUpdateValidate,
+  formatCodeValidityForMail,
+  codeExpiryResponseFields,
+  randomDigitCode,
 } from './auth.utils';
 import { FindIdSendDto } from './dto/find-id-send.dto';
 import { FindIdVerifyDto } from './dto/find-id-verify.dto';
@@ -40,24 +43,6 @@ import {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-
-  private formatCodeValidityForMail(ms: number): string {
-    const sec = Math.ceil(ms / 1000);
-    if (ms < 60_000) {
-      return `${sec}초`;
-    }
-    return `${Math.floor(ms / 60_000)}분`;
-  }
-
-  private codeExpiryResponseFields(ms: number): {
-    expiresInSeconds: number;
-    expiresInMinutes: number;
-  } {
-    return {
-      expiresInSeconds: Math.ceil(ms / 1000),
-      expiresInMinutes: Math.floor(ms / 60_000),
-    };
-  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -87,7 +72,7 @@ export class AuthService {
     }
     const codePurp = purposeUpdateEmailCode(userId);
     const tokPurp = purposeUpdateEmailToken(userId);
-    const code = this.random6DigitCode();
+    const code = randomDigitCode(6);
     const expiresAt = new Date(Date.now() + REGISTER_CODE_TTL_MS);
     await this.prisma.emailVerification.deleteMany({
       where: {
@@ -97,8 +82,8 @@ export class AuthService {
     await this.prisma.emailVerification.create({
       data: { email, code, purpose: codePurp, expiresAt },
     });
-    const ttlLabel = this.formatCodeValidityForMail(REGISTER_CODE_TTL_MS);
-    const expiry = this.codeExpiryResponseFields(REGISTER_CODE_TTL_MS);
+    const ttlLabel = formatCodeValidityForMail(REGISTER_CODE_TTL_MS);
+    const expiry = codeExpiryResponseFields(REGISTER_CODE_TTL_MS);
     if (this.mail.isSmtpConfigured()) {
       try {
         await this.mail.sendVerificationCode(
@@ -215,8 +200,8 @@ export class AuthService {
     await this.prisma.emailVerification.create({
       data: { email, code, purpose: PURPOSE_FIND_LOGIN_ID, expiresAt },
     });
-    const ttlLabel = this.formatCodeValidityForMail(FIND_ID_CODE_TTL_MS);
-    const expiry = this.codeExpiryResponseFields(FIND_ID_CODE_TTL_MS);
+    const ttlLabel = formatCodeValidityForMail(FIND_ID_CODE_TTL_MS);
+    const expiry = codeExpiryResponseFields(FIND_ID_CODE_TTL_MS);
     if (this.mail.isSmtpConfigured()) {
       try {
         await this.mail.sendVerificationCode(email, code, 'find-id', ttlLabel);

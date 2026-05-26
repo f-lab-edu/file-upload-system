@@ -17,10 +17,7 @@ import { UpdateMeDto } from './dto/update-me.dto';
 import { UpdateMeEmailSendDto } from './dto/update-me-email-send.dto';
 import { UpdateMeEmailVerifyDto } from './dto/update-me-email-verify.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
-
-type AuthedRequest = {
-  user: { id: string; loginId: string; email: string; name: string | null };
-};
+import type { AuthedRequest } from './types/authed-request.type';
 
 @Controller('api/auth')
 export class AuthController {

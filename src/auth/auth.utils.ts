@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import {
   purposeUpdateEmailCode,
   purposeUpdateEmailToken,
@@ -18,6 +18,29 @@ export const PER_MINUTE = 60_000;
 
 export function randomDigitCode(digits: number): string {
   return String(randomInt(10 ** (digits - 1), 10 ** digits));
+}
+
+export async function consumeVerificationCode(
+  prisma: PrismaService,
+  email: string,
+  code: string,
+  purpose: string,
+): Promise<void> {
+  const rec = await prisma.emailVerification.findFirst({
+    where: {
+      email,
+      purpose,
+      code,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!rec) {
+    throw new BadRequestException(
+      '인증번호가 올바르지 않거나 만료되었습니다.',
+    );
+  }
+  await prisma.emailVerification.delete({ where: { id: rec.id } });
 }
 
 export function codeExpiryResponseFields(ms: number): {

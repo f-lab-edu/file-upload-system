@@ -15,6 +15,7 @@ import {
 } from '../auth/auth.constants';
 import {
   codeExpiryResponseFields,
+  consumeVerificationCode,
   formatCodeValidityForMail,
   PASSWORD_HASH,
   randomDigitCode,
@@ -173,25 +174,16 @@ export class RegisterService {
   async registerVerifyCode(dto: RegisterVerifyCodeDto) {
     const email = dto.email.trim().toLowerCase();
     const code = dto.code.trim();
-    const rec = await this.prisma.emailVerification.findFirst({
-      where: {
-        email,
-        purpose: PURPOSE_REGISTER_CODE,
-        code,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!rec) {
-      throw new BadRequestException(
-        '인증번호가 올바르지 않거나 만료되었습니다.',
-      );
-    }
     const taken = await this.prisma.user.findUnique({ where: { email } });
     if (taken) {
       throw new ConflictException('이미 사용 중인 이메일입니다.');
     }
-    await this.prisma.emailVerification.delete({ where: { id: rec.id } });
+    await consumeVerificationCode(
+      this.prisma,
+      email,
+      code,
+      PURPOSE_REGISTER_CODE,
+    );
     const sessionToken = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + REGISTER_TOKEN_TTL_MS);
     await this.prisma.emailVerification.deleteMany({

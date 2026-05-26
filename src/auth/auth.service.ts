@@ -21,6 +21,7 @@ import {
   REGISTER_TOKEN_TTL_MS,
 } from './auth.constants';
 import {
+  consumeVerificationCode,
   emailUpdateValidate,
   PASSWORD_HASH,
   passwordUpdateValidate,
@@ -138,22 +139,12 @@ export class AuthService {
     if (taken) {
       throw new ConflictException('이미 사용 중인 이메일입니다.');
     }
-    const codePurp = purposeUpdateEmailCode(userId);
-    const rec = await this.prisma.emailVerification.findFirst({
-      where: {
-        email,
-        purpose: codePurp,
-        code,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!rec) {
-      throw new BadRequestException(
-        '인증번호가 올바르지 않거나 만료되었습니다.',
-      );
-    }
-    await this.prisma.emailVerification.delete({ where: { id: rec.id } });
+    await consumeVerificationCode(
+      this.prisma,
+      email,
+      code,
+      purposeUpdateEmailCode(userId),
+    );
     const sessionToken = randomBytes(32).toString('hex');
     const tokPurp = purposeUpdateEmailToken(userId);
     const expiresAt = new Date(Date.now() + REGISTER_TOKEN_TTL_MS);
@@ -236,21 +227,12 @@ export class AuthService {
   async findIdVerify(dto: FindIdVerifyDto) {
     const email = dto.email.trim().toLowerCase();
     const code = dto.code.trim();
-    const rec = await this.prisma.emailVerification.findFirst({
-      where: {
-        email,
-        purpose: PURPOSE_FIND_LOGIN_ID,
-        code,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!rec) {
-      throw new BadRequestException(
-        '인증번호가 올바르지 않거나 만료되었습니다.',
-      );
-    }
-    await this.prisma.emailVerification.delete({ where: { id: rec.id } });
+    await consumeVerificationCode(
+      this.prisma,
+      email,
+      code,
+      PURPOSE_FIND_LOGIN_ID,
+    );
     const user = await this.prisma.user.findUnique({
       where: { email },
       select: { loginId: true },

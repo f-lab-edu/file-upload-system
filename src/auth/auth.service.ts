@@ -101,22 +101,21 @@ export class AuthService {
     const expiry = this.codeExpiryResponseFields(REGISTER_CODE_TTL_MS);
     if (this.mail.isSmtpConfigured()) {
       try {
-    await this.mail.sendVerificationCode(
-      email,
-      code,
-      'update-email',
-      ttlLabel,
-    );
-  } catch (err) {
-    
-    this.logger.error(err);
-    await this.prisma.emailVerification.deleteMany({
-      where: { email, purpose: codePurp },
-    });
-    throw new InternalServerErrorException(
-      '이메일 발송에 실패했습니다. SMTP 설정을 확인하거나 잠시 후 다시 시도해 주세요.',
-    );
-  }
+        await this.mail.sendVerificationCode(
+          email,
+          code,
+          'update-email',
+          ttlLabel,
+        );
+      } catch (err) {
+        this.logger.error(err);
+        await this.prisma.emailVerification.deleteMany({
+          where: { email, purpose: codePurp },
+        });
+        throw new InternalServerErrorException(
+          '이메일 발송에 실패했습니다. SMTP 설정을 확인하거나 잠시 후 다시 시도해 주세요.',
+        );
+      }
       return {
         sent: true,
         ...expiry,

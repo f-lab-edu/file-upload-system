@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {
   PURPOSE_REGISTER_CODE,
@@ -72,52 +73,79 @@ export class RegisterService {
     const email = dto.email.trim().toLowerCase();
     const loginId = dto.loginId.trim().toLowerCase();
     const token = dto.emailVerifyToken.trim().toLowerCase();
-    const emailSession = await this.prisma.emailVerification.findFirst({
-      where: {
-        email,
-        purpose: PURPOSE_REGISTER_TOKEN,
-        code: token,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+
+    const [emailSession, existingEmail, existingId, hash] = await Promise.all([
+      this.prisma.emailVerification.findFirst({
+        where: {
+          email,
+          purpose: PURPOSE_REGISTER_TOKEN,
+          code: token,
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { loginId },
+        select: { id: true },
+      }),
+      bcrypt.hash(dto.password, PASSWORD_HASH),
+    ]);
+
     if (!emailSession) {
       throw new BadRequestException('이메일 인증을 완료해 주세요.');
     }
-    const existingEmail = await this.prisma.user.findUnique({
-      where: { email },
-    });
     if (existingEmail) {
       throw new ConflictException('이미 사용 중인 이메일입니다.');
     }
-    const existingId = await this.prisma.user.findUnique({
-      where: { loginId },
-    });
     if (existingId) {
       throw new ConflictException('이미 사용 중인 아이디입니다.');
     }
-    const hash = await bcrypt.hash(dto.password, PASSWORD_HASH);
-    const user = await this.prisma.user.create({
-      data: {
-        loginId,
-        email,
-        password: hash,
-        name: dto.name.trim(),
-      },
-      select: {
-        id: true,
-        loginId: true,
-        email: true,
-        name: true,
-        createdAt: true,
-      },
-    });
-    await this.prisma.emailVerification.deleteMany({
-      where: {
-        email,
-        purpose: { in: [PURPOSE_REGISTER_CODE, PURPOSE_REGISTER_TOKEN] },
-      },
-    });
+
+    const user = await this.prisma
+      .$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            loginId,
+            email,
+            password: hash,
+            name: dto.name.trim(),
+          },
+          select: {
+            id: true,
+            loginId: true,
+            email: true,
+            name: true,
+            createdAt: true,
+          },
+        });
+        await tx.emailVerification.deleteMany({
+          where: {
+            email,
+            purpose: { in: [PURPOSE_REGISTER_CODE, PURPOSE_REGISTER_TOKEN] },
+          },
+        });
+        return created;
+      })
+      .catch((err: unknown) => {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002'
+        ) {
+          const target = err.meta?.target as string[] | undefined;
+          if (target?.includes('email')) {
+            throw new ConflictException('이미 사용 중인 이메일입니다.');
+          }
+          if (target?.includes('loginId')) {
+            throw new ConflictException('이미 사용 중인 아이디입니다.');
+          }
+        }
+        throw err;
+      });
+
     const accessToken = this.token.signToken(user.id, user.email);
     const refreshToken = await this.token.grantRefreshToken(user.id, true);
     return { user, accessToken, refreshToken };

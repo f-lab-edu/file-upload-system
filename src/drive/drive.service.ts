@@ -81,7 +81,6 @@ export class DriveService {
   }
 
   async list(userId: string, parentId: string | null) {
-    await this.purgeExpiredTrash(userId);
     const items = await this.prisma.driveItem.findMany({
       where: { userId, parentId, deletedAt: null },
       orderBy: [{ type: 'desc' }, { name: 'asc' }],
@@ -101,7 +100,6 @@ export class DriveService {
   }
 
   async createFolder(userId: string, dto: CreateFolderDto) {
-    await this.purgeExpiredTrash(userId);
     const parentId = dto.parentId ?? null;
     if (parentId) {
       await this.assertFolderOwned(userId, parentId);
@@ -130,7 +128,6 @@ export class DriveService {
     parentId: string | null,
     section: 'docs' | 'images',
   ) {
-    await this.purgeExpiredTrash(userId);
     const resolvedParentId = parentId;
     if (resolvedParentId) {
       await this.assertFolderOwned(userId, resolvedParentId);
@@ -162,7 +159,6 @@ export class DriveService {
   }
 
   async deleteItem(userId: string, id: string) {
-    await this.purgeExpiredTrash(userId);
     const item = await this.prisma.driveItem.findFirst({
       where: { id, userId, deletedAt: null },
     });
@@ -209,7 +205,6 @@ export class DriveService {
 
   /** 휴지통 항목을 즉시 영구 삭제한다(하위 포함). */
   async purgeTrashItem(userId: string, id: string) {
-    await this.purgeExpiredTrash(userId);
     const item = await this.prisma.driveItem.findFirst({
       where: { id, userId, deletedAt: { not: null } },
     });
@@ -237,7 +232,6 @@ export class DriveService {
 
   /** 휴지통의 모든 파일을 영구 삭제한다. */
   async purgeAllTrash(userId: string): Promise<{ count: number }> {
-    await this.purgeExpiredTrash(userId);
     const items = await this.prisma.driveItem.findMany({
       where: {
         userId,
@@ -265,7 +259,6 @@ export class DriveService {
   }
 
   async listTrash(userId: string) {
-    await this.purgeExpiredTrash(userId);
     const items = await this.prisma.driveItem.findMany({
       where: {
         userId,
@@ -311,7 +304,7 @@ export class DriveService {
     }
   }
 
-  private async purgeExpiredTrash(userId: string): Promise<void> {
+  async purgeExpiredTrash(userId: string): Promise<void> {
     const expired = await this.prisma.driveItem.findMany({
       where: {
         userId,
@@ -363,7 +356,6 @@ export class DriveService {
   }
 
   async moveItem(userId: string, id: string, newParentId: string | null) {
-    await this.purgeExpiredTrash(userId);
     const item = await this.prisma.driveItem.findFirst({
       where: { id, userId },
     });
@@ -457,7 +449,6 @@ export class DriveService {
   }
 
   async renameItem(userId: string, id: string, rawName: string) {
-    await this.purgeExpiredTrash(userId);
     const name = rawName.trim().normalize('NFC');
     if (!name) {
       throw new BadRequestException('이름을 입력해 주세요.');
@@ -504,7 +495,6 @@ export class DriveService {
     id: string,
     allowDeleted = false,
   ): Promise<DriveItem> {
-    await this.purgeExpiredTrash(userId);
     const item = await this.prisma.driveItem.findFirst({
       where: {
         id,

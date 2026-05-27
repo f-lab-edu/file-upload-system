@@ -41,8 +41,6 @@ function createVerificationMailParams(
 }
 
 type GivenMailOptions = {
-  nodeEnv?: 'development' | 'production';
-  clearNodeEnv?: boolean;
   smtp?: boolean;
 };
 
@@ -59,12 +57,6 @@ function smtpConfigGet(key: string): string | undefined {
 function givenMailService(overrides: GivenMailOptions = {}): MailService {
   const smtp = overrides.smtp ?? true;
 
-  if (overrides.clearNodeEnv) {
-    delete process.env.NODE_ENV;
-  } else {
-    process.env.NODE_ENV = overrides.nodeEnv ?? 'development';
-  }
-
   const config = {
     get: jest.fn((key: string) => (smtp ? smtpConfigGet(key) : undefined)),
   };
@@ -73,52 +65,29 @@ function givenMailService(overrides: GivenMailOptions = {}): MailService {
 }
 
 describe('MailService', () => {
-  const originalNodeEnv = process.env.NODE_ENV;
-
   beforeEach(() => {
     jest.clearAllMocks();
     createTransportMock.mockReturnValue({ sendMail: sendMailMock } as any);
   });
 
-  afterEach(() => {
-    if (originalNodeEnv === undefined) {
-      delete process.env.NODE_ENV;
-    } else {
-      process.env.NODE_ENV = originalNodeEnv;
-    }
-  });
-
   describe('isSmtpConfigured', () => {
-    it('development 환경이면 SMTP가 있어도 false 이다', () => {
-      const service = givenMailService({ nodeEnv: 'development' });
-
-      expect(service.isSmtpConfigured()).toBe(false);
-      expect(createTransportMock).toHaveBeenCalled();
-    });
-
-    it('production 환경이고 SMTP가 있으면 true 이다', () => {
-      const service = givenMailService({ nodeEnv: 'production' });
+    it('SMTP 설정이 있으면 true 이다', () => {
+      const service = givenMailService();
 
       expect(service.isSmtpConfigured()).toBe(true);
     });
 
-    it('production 환경이어도 SMTP가 없으면 false 이다', () => {
-      const service = givenMailService({ nodeEnv: 'production', smtp: false });
+    it('SMTP 설정이 없으면 false 이다', () => {
+      const service = givenMailService({ smtp: false });
 
       expect(service.isSmtpConfigured()).toBe(false);
       expect(createTransportMock).not.toHaveBeenCalled();
-    });
-
-    it('NODE_ENV가 없으면 development 로 간주해 false 이다', () => {
-      const service = givenMailService({ clearNodeEnv: true });
-
-      expect(service.isSmtpConfigured()).toBe(false);
     });
   });
 
   describe('sendVerificationCode', () => {
     it('SMTP가 없으면 예외를 던진다', async () => {
-      const service = givenMailService({ nodeEnv: 'production', smtp: false });
+      const service = givenMailService({ smtp: false });
       const mail = createVerificationMailParams();
 
       await expect(
@@ -131,8 +100,8 @@ describe('MailService', () => {
       ).rejects.toThrow('SMTP is not configured');
     });
 
-    it('production 환경이고 SMTP가 있으면 sendMail을 호출한다', async () => {
-      const service = givenMailService({ nodeEnv: 'production' });
+    it('SMTP가 있으면 sendMail을 호출한다', async () => {
+      const service = givenMailService();
       const mail = createVerificationMailParams();
 
       await service.sendVerificationCode(

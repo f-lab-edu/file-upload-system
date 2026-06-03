@@ -26,6 +26,8 @@ import { MoveItemDto } from './dto/move-item.dto';
 import { RenameItemDto } from './dto/rename-item.dto';
 import { PurgeExpiredTrashInterceptor } from './interceptors/purge-expired-trash.interceptor';
 
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+
 @Controller('api/drive')
 @UseGuards(JwtAuthGuard)
 @UseInterceptors(PurgeExpiredTrashInterceptor)
@@ -59,7 +61,7 @@ export class DriveController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: 100 * 1024 * 1024 },
+      limits: { fileSize: MAX_FILE_SIZE },
     }),
   )
   async upload(

@@ -1,6 +1,5 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
-import { LoggingMiddleware } from '../common/middleware/logging.middleware';
 import { DriveModule } from '../drive/drive.module';
 import { MailModule } from '../mail/mail.module';
 import { RegisterModule } from '../register/register.module';
@@ -21,8 +20,4 @@ import { JwtStrategy } from './jwt.strategy';
   providers: [AuthService, JwtStrategy],
   exports: [AuthService, TokenModule],
 })
-export class AuthModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(LoggingMiddleware).forRoutes('*');
-  }
-}
+export class AuthModule {}

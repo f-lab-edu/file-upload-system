@@ -5,9 +5,11 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { DriveItem, DriveItemType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFolderDto } from './dto/create-folder.dto';
@@ -56,6 +58,7 @@ function isSystemSectionRootFolder(row: {
 
 @Injectable()
 export class DriveService {
+  private readonly logger = new Logger(DriveService.name);
   private readonly uploadRoot: string;
 
   constructor(
@@ -300,30 +303,29 @@ export class DriveService {
     await fs.rm(this.userDir(userId), { recursive: true, force: true });
   }
 
-  async purgeExpiredTrash(userId: string): Promise<void> {
+  @Cron(CronExpression.EVERY_HOUR)
+  async purgeAllExpiredTrash(): Promise<void> {
     const expired = await this.prisma.driveItem.findMany({
       where: {
-        userId,
         deletedAt: { not: null },
         purgeAt: { lte: new Date() },
       },
-      select: { id: true, storageKey: true },
+      select: { id: true, userId: true, storageKey: true },
     });
     if (!expired.length) return;
     const ids = expired.map((x) => x.id);
-    const keys = expired
-      .map((x) => x.storageKey)
-      .filter((x): x is string => !!x);
     await this.prisma.driveItem.deleteMany({
-      where: { userId, id: { in: ids } },
+      where: { id: { in: ids } },
     });
-    for (const key of keys) {
+    for (const row of expired) {
+      if (!row.storageKey) continue;
       try {
-        await fs.unlink(this.filePath(userId, key));
+        await fs.unlink(this.filePath(row.userId, row.storageKey));
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       }
     }
+    this.logger.log(`만료된 휴지통 ${expired.length}건 정리 완료`);
   }
 
   private async collectSubtreeIds(

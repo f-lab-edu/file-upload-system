@@ -33,8 +33,11 @@ export class DriveController {
   constructor(private readonly drive: DriveService) {}
 
   @Get('items')
-  async list(@Req() req: AuthedRequest, @Query('parentId') parentId?: string) {
-    return this.drive.list(req.user.id, this.resolveParentId(parentId));
+  list(
+    @Req() req: AuthedRequest,
+    @Query('parentId', new ParseUUIDPipe({ optional: true })) parentId?: string,
+  ) {
+    return this.drive.list(req.user.id, parentId ?? null);
   }
 
   @Get('trash')
@@ -62,7 +65,7 @@ export class DriveController {
   async upload(
     @Req() req: AuthedRequest,
     @UploadedFile() file: Express.Multer.File,
-    @Body('parentId') parentId?: string,
+    @Body('parentId', new ParseUUIDPipe({ optional: true })) parentId?: string,
     @Body('section') section?: string,
   ) {
     if (!file) {
@@ -73,7 +76,7 @@ export class DriveController {
     const created = await this.drive.uploadFile(
       req.user.id,
       file,
-      this.resolveParentId(parentId),
+      parentId ?? null,
       uploadSection,
     );
     return {
@@ -104,11 +107,7 @@ export class DriveController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: MoveItemDto,
   ) {
-    return this.drive.moveItem(
-      req.user.id,
-      id,
-      this.resolveParentId(dto.parentId),
-    );
+    return this.drive.moveItem(req.user.id, id, dto.parentId ?? null);
   }
 
   @Patch('items/:id/rename')
@@ -136,15 +135,4 @@ export class DriveController {
     res.send(buf);
   }
 
-  private resolveParentId(raw: string | null | undefined): string | null {
-    if (!raw) return null;
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        raw,
-      )
-    ) {
-      throw new BadRequestException('parentId가 올바르지 않습니다.');
-    }
-    return raw;
-  }
 }

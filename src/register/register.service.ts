@@ -3,7 +3,6 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -15,9 +14,8 @@ import {
   REGISTER_TOKEN_TTL_MS,
 } from '../auth/auth.constants';
 import {
-  codeExpiryResponseFields,
   consumeVerificationCode,
-  formatCodeValidityForMail,
+  issueAndSendVerificationCode,
   PASSWORD_HASH,
   randomDigitCode,
 } from '../auth/auth.utils';
@@ -157,46 +155,16 @@ export class RegisterService {
     if (taken) {
       throw new ConflictException('이미 사용 중인 이메일입니다.');
     }
-    const code = randomDigitCode(6);
-    const expiresAt = new Date(Date.now() + REGISTER_CODE_TTL_MS);
-    await this.prisma.emailVerification.deleteMany({
-      where: {
-        email,
-        purpose: { in: [PURPOSE_REGISTER_CODE, PURPOSE_REGISTER_TOKEN] },
-      },
+    return issueAndSendVerificationCode(this.prisma, this.mail, this.logger, {
+      email,
+      code: randomDigitCode(6),
+      purpose: PURPOSE_REGISTER_CODE,
+      purgePurposes: [PURPOSE_REGISTER_CODE, PURPOSE_REGISTER_TOKEN],
+      ttlMs: REGISTER_CODE_TTL_MS,
+      mailType: 'register',
+      logPrefix: '회원가입 이메일',
+      throwOnMailError: true,
     });
-    await this.prisma.emailVerification.create({
-      data: { email, code, purpose: PURPOSE_REGISTER_CODE, expiresAt },
-    });
-    const ttlLabel = formatCodeValidityForMail(REGISTER_CODE_TTL_MS);
-    const expiry = codeExpiryResponseFields(REGISTER_CODE_TTL_MS);
-    if (this.mail.isSmtpConfigured()) {
-      try {
-        await this.mail.sendVerificationCode(email, code, 'register', ttlLabel);
-      } catch (err) {
-        this.logger.error(err);
-        await this.prisma.emailVerification.deleteMany({
-          where: { email, purpose: PURPOSE_REGISTER_CODE },
-        });
-        throw new InternalServerErrorException(
-          '이메일 발송에 실패했습니다. SMTP 설정을 확인하거나 잠시 후 다시 시도해 주세요.',
-        );
-      }
-      return {
-        sent: true,
-        ...expiry,
-        message: '인증번호가 발송되었습니다. 이메일을 확인해 주세요.',
-      };
-    }
-    this.logger.warn(
-      `[회원가입 이메일] SMTP 미설정 — ${email} 인증번호: ${code} (유효 ${ttlLabel}, 터미널 확인)`,
-    );
-    return {
-      sent: true,
-      ...expiry,
-      message:
-        '인증번호가 발송되었습니다. 이메일을 확인해 주세요. (SMTP 미설정: 서버 터미널에 인증번호가 출력됩니다.)',
-    };
   }
 
   async registerVerifyCode(dto: RegisterVerifyCodeDto) {

@@ -338,17 +338,14 @@ export class DriveService {
     });
     if (!root) return [];
     const ids: string[] = [root.id];
-    const stack: string[] = [root.id];
-    while (stack.length) {
-      const current = stack.pop()!;
+    let level: string[] = [root.id];
+    while (level.length) {
       const children = await this.prisma.driveItem.findMany({
-        where: { userId, parentId: current, deletedAt },
+        where: { userId, parentId: { in: level }, deletedAt },
         select: { id: true },
       });
-      for (const child of children) {
-        ids.push(child.id);
-        stack.push(child.id);
-      }
+      level = children.map((child) => child.id);
+      ids.push(...level);
     }
     return ids;
   }
@@ -447,20 +444,8 @@ export class DriveService {
     ancestorId: string,
     candidateId: string,
   ): Promise<boolean> {
-    let current: string | null = candidateId;
-    const seen = new Set<string>();
-    while (current) {
-      if (seen.has(current)) break;
-      seen.add(current);
-      if (current === ancestorId) return true;
-      const parentRow: { parentId: string | null } | null =
-        await this.prisma.driveItem.findFirst({
-          where: { id: current, userId, deletedAt: null },
-          select: { parentId: true },
-        });
-      current = parentRow?.parentId ?? null;
-    }
-    return false;
+    const subtreeIds = await this.collectSubtreeIds(userId, ancestorId);
+    return new Set(subtreeIds).has(candidateId);
   }
 
   async getFileForUser(

@@ -8,10 +8,12 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { TokenService } from '../token/token.service';
 import { AuthService } from './auth.service';
 import { FindIdSendDto } from './dto/find-id-send.dto';
 import { FindIdVerifyDto } from './dto/find-id-verify.dto';
 import { LoginDto } from './dto/login.dto';
+import { RefreshSessionDto } from './dto/refresh-session.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UpdateMeEmailSendDto } from './dto/update-me-email-send.dto';
@@ -21,11 +23,19 @@ import type { AuthedRequest } from './types/authed-request.type';
 
 @Controller('api/auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly token: TokenService,
+  ) {}
 
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
+  }
+
+  @Post('refresh')
+  refresh(@Body() dto: RefreshSessionDto) {
+    return this.token.refreshSession(dto.refreshToken);
   }
 
   @Post('find-id/send-code')

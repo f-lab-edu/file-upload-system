@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import {
   BadRequestException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -14,6 +15,8 @@ import {
 
 @Injectable()
 export class TokenService {
+  private readonly logger = new Logger(TokenService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -69,7 +72,9 @@ export class TokenService {
       if (row) {
         await this.prisma.userRefreshToken
           .delete({ where: { id: row.id } })
-          .catch(() => undefined);
+          .catch((err) => {
+            if (err?.code !== 'P2025') this.logger.warn(err);
+          });
       }
       throw new UnauthorizedException(
         '세션이 만료되었습니다. 다시 로그인해 주세요.',

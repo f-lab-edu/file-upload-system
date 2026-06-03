@@ -211,7 +211,7 @@ export class DriveService {
     if (!item) {
       throw new NotFoundException('항목을 찾을 수 없습니다.');
     }
-    const ids = await this.collectTrashSubtreeIds(userId, id);
+    const ids = await this.collectSubtreeIds(userId, id, true);
     const rows = await this.prisma.driveItem.findMany({
       where: { userId, id: { in: ids } },
       select: { storageKey: true },
@@ -333,9 +333,11 @@ export class DriveService {
   private async collectSubtreeIds(
     userId: string,
     rootId: string,
+    trashed = false,
   ): Promise<string[]> {
+    const deletedAt = trashed ? { not: null } : null;
     const root = await this.prisma.driveItem.findFirst({
-      where: { id: rootId, userId, deletedAt: null },
+      where: { id: rootId, userId, deletedAt },
       select: { id: true },
     });
     if (!root) return [];
@@ -344,7 +346,7 @@ export class DriveService {
     while (stack.length) {
       const current = stack.pop()!;
       const children = await this.prisma.driveItem.findMany({
-        where: { userId, parentId: current, deletedAt: null },
+        where: { userId, parentId: current, deletedAt },
         select: { id: true },
       });
       for (const child of children) {
@@ -407,7 +409,7 @@ export class DriveService {
     }
     await this.assertUniqueName(userId, newParentId, item.name, item.id);
 
-    const subtreeIds = await this.collectTrashSubtreeIds(userId, item.id);
+    const subtreeIds = await this.collectSubtreeIds(userId, item.id, true);
     if (!subtreeIds.length) {
       throw new NotFoundException('항목을 찾을 수 없습니다.');
     }
@@ -422,31 +424,6 @@ export class DriveService {
     });
   }
 
-  /** 휴지통에 있는 항목과 그 자손(삭제된 항목만) id 목록 */
-  private async collectTrashSubtreeIds(
-    userId: string,
-    rootId: string,
-  ): Promise<string[]> {
-    const root = await this.prisma.driveItem.findFirst({
-      where: { id: rootId, userId, deletedAt: { not: null } },
-      select: { id: true },
-    });
-    if (!root) return [];
-    const ids: string[] = [root.id];
-    const stack: string[] = [root.id];
-    while (stack.length) {
-      const current = stack.pop()!;
-      const children = await this.prisma.driveItem.findMany({
-        where: { userId, parentId: current, deletedAt: { not: null } },
-        select: { id: true },
-      });
-      for (const c of children) {
-        ids.push(c.id);
-        stack.push(c.id);
-      }
-    }
-    return ids;
-  }
 
   async renameItem(userId: string, id: string, rawName: string) {
     const name = rawName.trim().normalize('NFC');

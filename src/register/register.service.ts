@@ -103,8 +103,9 @@ export class RegisterService {
       throw new ConflictException('이미 사용 중인 아이디입니다.');
     }
 
-    const user = await this.prisma
-      .$transaction(async (tx) => {
+    let user;
+    try {
+      user = await this.prisma.$transaction(async (tx) => {
         const created = await tx.user.create({
           data: {
             loginId,
@@ -127,22 +128,22 @@ export class RegisterService {
           },
         });
         return created;
-      })
-      .catch((err: unknown) => {
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002'
-        ) {
-          const target = err.meta?.target as string[] | undefined;
-          if (target?.includes('email')) {
-            throw new ConflictException('이미 사용 중인 이메일입니다.');
-          }
-          if (target?.includes('loginId')) {
-            throw new ConflictException('이미 사용 중인 아이디입니다.');
-          }
-        }
-        throw err;
       });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        const target = err.meta?.target as string[] | undefined;
+        if (target?.includes('email')) {
+          throw new ConflictException('이미 사용 중인 이메일입니다.');
+        }
+        if (target?.includes('loginId')) {
+          throw new ConflictException('이미 사용 중인 아이디입니다.');
+        }
+      }
+      throw err;
+    }
 
     const accessToken = this.token.signToken(user.id, user.email);
     const refreshToken = await this.token.grantRefreshToken(user.id, true);

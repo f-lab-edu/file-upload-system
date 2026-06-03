@@ -223,8 +223,8 @@ export class DriveService {
     for (const key of keys) {
       try {
         await fs.unlink(this.filePath(userId, key));
-      } catch {
-        /* ignore missing file */
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       }
     }
     return { ok: true };
@@ -251,8 +251,8 @@ export class DriveService {
     for (const key of keys) {
       try {
         await fs.unlink(this.filePath(userId, key));
-      } catch {
-        /* ignore missing file */
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       }
     }
     return { count: items.length };
@@ -293,15 +293,11 @@ export class DriveService {
       if (!row.storageKey) continue;
       try {
         await fs.unlink(this.filePath(userId, row.storageKey));
-      } catch {
-        /* ignore missing file */
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       }
     }
-    try {
-      await fs.rm(this.userDir(userId), { recursive: true, force: true });
-    } catch {
-      /* ignore missing dir */
-    }
+    await fs.rm(this.userDir(userId), { recursive: true, force: true });
   }
 
   async purgeExpiredTrash(userId: string): Promise<void> {
@@ -324,8 +320,8 @@ export class DriveService {
     for (const key of keys) {
       try {
         await fs.unlink(this.filePath(userId, key));
-      } catch {
-        /* ignore missing file */
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       }
     }
   }

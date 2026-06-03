@@ -2,6 +2,7 @@ import { randomBytes, randomInt } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -10,7 +11,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { DriveService } from '../drive/drive.service';
-import { MailService } from '../mail/mail.service';
+import { MAIL_INTERFACE } from '../mail/mail.interface';
+import type { IMailService } from '../mail/mail.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
 import {
@@ -63,7 +65,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     readonly _jwt: JwtService,
-    private readonly mail: MailService,
+    @Inject(MAIL_INTERFACE) private readonly mail: IMailService,
     private readonly drive: DriveService,
     private readonly token: TokenService,
   ) {}

@@ -1,10 +1,11 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Transporter } from 'nodemailer';
 import * as nodemailer from 'nodemailer';
 import { SMTP_PRESETS } from './smtp-presets';
+import { IMailService, MailVerificationKind } from './mail.interface';
 
-export type MailVerificationKind = 'register' | 'find-id' | 'update-email';
+export type { MailVerificationKind };
 
 const VERIFICATION_MAIL_TEXT =
   '인증번호: {{code}}\n유효 시간: {{validityLabel}}\n\n본인이 요청하지 않았다면 이 메일을 무시해 주세요.';
@@ -30,7 +31,7 @@ function resolveMailFrom(raw: string | undefined, smtpUser: string): string {
 }
 
 @Injectable()
-export class MailService implements OnModuleInit {
+export class MailService implements IMailService {
   private readonly logger = new Logger(MailService.name);
   private readonly transporter: Transporter | null;
   private readonly fromAddress: string;

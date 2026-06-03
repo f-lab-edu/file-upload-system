@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -23,7 +24,8 @@ import {
   isPasswordPolicyCompliant,
   PASSWORD_POLICY_MESSAGE,
 } from '../auth/password-policy';
-import { MailService } from '../mail/mail.service';
+import { MAIL_INTERFACE } from '../mail/mail.interface';
+import type { IMailService } from '../mail/mail.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
 import { RegisterDto } from './dto/register.dto';
@@ -37,7 +39,7 @@ export class RegisterService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly token: TokenService,
-    private readonly mail: MailService,
+    @Inject(MAIL_INTERFACE) private readonly mail: IMailService,
   ) {}
 
   /** 회원가입 전 아이디 사용 가능 여부 (공개) */

@@ -243,9 +243,8 @@ export class AuthService {
     if (!isPasswordPolicyCompliant(dto.newPassword)) {
       throw new BadRequestException(PASSWORD_POLICY_MESSAGE);
     }
-    const loginId = dto.loginId.trim().toLowerCase();
     const user = await this.prisma.user.findUnique({
-      where: { loginId },
+      where: { loginId: dto.loginId },
     });
     if (!user) {
       throw new BadRequestException('등록되지 않은 아이디입니다.');
@@ -265,9 +264,8 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const loginId = dto.loginId.trim().toLowerCase();
     const user = await this.prisma.user.findUnique({
-      where: { loginId },
+      where: { loginId: dto.loginId },
     });
     if (!user) {
       throw new UnauthorizedException(

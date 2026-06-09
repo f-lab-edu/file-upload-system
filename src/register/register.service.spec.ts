@@ -61,14 +61,18 @@ describe('RegisterService', () => {
     service = module.get<RegisterService>(RegisterService);
   });
   describe('checkRegisterLoginIdAvailability', () => {
-    it('아이디가 비어 있으면 BadRequestException을 던지고 DB를 조회하지 않는다', async () => {
+    it('이미 사용 중인 아이디면 available: false를 반환한다', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1' } as any);
       await expect(
-        service.checkRegisterLoginIdAvailability(''),
-      ).rejects.toThrow(BadRequestException);
+        service.checkRegisterLoginIdAvailability({ loginId: 'testuser' }),
+      ).resolves.toEqual({ available: false });
+    });
+
+    it('사용 가능한 아이디면 available: true를 반환한다', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
       await expect(
-        service.checkRegisterLoginIdAvailability(''),
-      ).rejects.toThrow('아이디를 입력해 주세요.');
-      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+        service.checkRegisterLoginIdAvailability({ loginId: 'testuser' }),
+      ).resolves.toEqual({ available: true });
     });
   });
 

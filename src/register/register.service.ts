@@ -26,6 +26,7 @@ import {
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
+import { CheckLoginIdDto } from './dto/check-login-id.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterSendCodeDto } from './dto/register-send-code.dto';
 import { RegisterVerifyCodeDto } from './dto/register-verify-code.dto';
@@ -42,20 +43,10 @@ export class RegisterService {
 
   /** 회원가입 전 아이디 사용 가능 여부 (공개) */
   async checkRegisterLoginIdAvailability(
-    raw: string,
+    dto: CheckLoginIdDto,
   ): Promise<{ available: boolean }> {
-    const loginId = raw.trim().toLowerCase();
-    if (!loginId) {
-      throw new BadRequestException('아이디를 입력해 주세요.');
-    }
-    if (loginId.length < 4 || loginId.length > 20) {
-      throw new BadRequestException('아이디는 4~20자여야 합니다.');
-    }
-    if (!/^[a-zA-Z0-9_]+$/.test(loginId)) {
-      throw new BadRequestException('아이디 형식이 올바르지 않습니다.');
-    }
     const existing = await this.prisma.user.findUnique({
-      where: { loginId },
+      where: { loginId: dto.loginId },
       select: { id: true },
     });
     return { available: existing === null };

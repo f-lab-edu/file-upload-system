@@ -24,13 +24,11 @@ import { DriveService, isImageMime } from './drive.service';
 import { CreateFolderDto } from './dto/create-folder.dto';
 import { MoveItemDto } from './dto/move-item.dto';
 import { RenameItemDto } from './dto/rename-item.dto';
-import { PurgeExpiredTrashInterceptor } from './interceptors/purge-expired-trash.interceptor';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
 @Controller('api/drive')
 @UseGuards(JwtAuthGuard)
-@UseInterceptors(PurgeExpiredTrashInterceptor)
 export class DriveController {
   constructor(private readonly drive: DriveService) {}
 

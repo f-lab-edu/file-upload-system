@@ -1,14 +1,12 @@
-import { randomBytes, randomInt } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
   Inject,
   Injectable,
-  InternalServerErrorException,
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { DriveService } from '../drive/drive.service';
 import { MAIL_INTERFACE } from '../mail/mail.interface';
@@ -24,9 +22,12 @@ import {
   REGISTER_TOKEN_TTL_MS,
 } from './auth.constants';
 import {
+  consumeVerificationCode,
   emailUpdateValidate,
+  issueAndSendVerificationCode,
   PASSWORD_HASH,
   passwordUpdateValidate,
+  randomDigitCode,
 } from './auth.utils';
 import { FindIdSendDto } from './dto/find-id-send.dto';
 import { FindIdVerifyDto } from './dto/find-id-verify.dto';
@@ -43,24 +44,6 @@ import {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-
-  private formatCodeValidityForMail(ms: number): string {
-    const sec = Math.ceil(ms / 1000);
-    if (ms < 60_000) {
-      return `${sec}초`;
-    }
-    return `${Math.floor(ms / 60_000)}분`;
-  }
-
-  private codeExpiryResponseFields(ms: number): {
-    expiresInSeconds: number;
-    expiresInMinutes: number;
-  } {
-    return {
-      expiresInSeconds: Math.ceil(ms / 1000),
-      expiresInMinutes: Math.floor(ms / 60_000),
-    };
-  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -91,51 +74,16 @@ export class AuthService {
     }
     const codePurp = purposeUpdateEmailCode(userId);
     const tokPurp = purposeUpdateEmailToken(userId);
-    const code = this.random6DigitCode();
-    const expiresAt = new Date(Date.now() + REGISTER_CODE_TTL_MS);
-    await this.prisma.emailVerification.deleteMany({
-      where: {
-        OR: [{ purpose: codePurp }, { purpose: tokPurp }],
-      },
-    });
-    await this.prisma.emailVerification.create({
-      data: { email, code, purpose: codePurp, expiresAt },
-    });
-    const ttlLabel = this.formatCodeValidityForMail(REGISTER_CODE_TTL_MS);
-    const expiry = this.codeExpiryResponseFields(REGISTER_CODE_TTL_MS);
-    if (this.mail.isSmtpConfigured()) {
-      try {
-    await this.mail.sendVerificationCode(
+    return issueAndSendVerificationCode(this.prisma, this.mail, this.logger, {
       email,
-      code,
-      'update-email',
-      ttlLabel,
-    );
-  } catch (err) {
-    
-    this.logger.error(err);
-    await this.prisma.emailVerification.deleteMany({
-      where: { email, purpose: codePurp },
+      code: randomDigitCode(6),
+      purpose: codePurp,
+      purgePurposes: [codePurp, tokPurp],
+      ttlMs: REGISTER_CODE_TTL_MS,
+      mailType: 'update-email',
+      logPrefix: '이메일 변경',
+      throwOnMailError: true,
     });
-    throw new InternalServerErrorException(
-      '이메일 발송에 실패했습니다. SMTP 설정을 확인하거나 잠시 후 다시 시도해 주세요.',
-    );
-  }
-      return {
-        sent: true,
-        ...expiry,
-        message: '인증번호가 발송되었습니다. 이메일을 확인해 주세요.',
-      };
-    }
-    this.logger.warn(
-      `[이메일 변경] SMTP 미설정 — ${email} 인증번호: ${code} (유효 ${ttlLabel}, 터미널 확인)`,
-    );
-    return {
-      sent: true,
-      ...expiry,
-      message:
-        '인증번호가 발송되었습니다. 이메일을 확인해 주세요. (SMTP 미설정: 서버 터미널에 인증번호가 출력됩니다.)',
-    };
   }
 
   async updateMeEmailVerifyCode(userId: string, dto: UpdateMeEmailVerifyDto) {
@@ -158,22 +106,12 @@ export class AuthService {
     if (taken) {
       throw new ConflictException('이미 사용 중인 이메일입니다.');
     }
-    const codePurp = purposeUpdateEmailCode(userId);
-    const rec = await this.prisma.emailVerification.findFirst({
-      where: {
-        email,
-        purpose: codePurp,
-        code,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!rec) {
-      throw new BadRequestException(
-        '인증번호가 올바르지 않거나 만료되었습니다.',
-      );
-    }
-    await this.prisma.emailVerification.delete({ where: { id: rec.id } });
+    await consumeVerificationCode(
+      this.prisma,
+      email,
+      code,
+      purposeUpdateEmailCode(userId),
+    );
     const sessionToken = randomBytes(32).toString('hex');
     const tokPurp = purposeUpdateEmailToken(userId);
     const expiresAt = new Date(Date.now() + REGISTER_TOKEN_TTL_MS);
@@ -189,10 +127,6 @@ export class AuthService {
       },
     });
     return { emailVerifyToken: sessionToken };
-  }
-
-  private random6DigitCode(): string {
-    return String(randomInt(100000, 1000000));
   }
 
   async findIdSendCode(dto: FindIdSendDto) {
@@ -212,65 +146,27 @@ export class AuthService {
       };
     }
 
-    const code = this.random6DigitCode();
-    const expiresAt = new Date(Date.now() + FIND_ID_CODE_TTL_MS);
-    await this.prisma.emailVerification.deleteMany({
-      where: { email, purpose: PURPOSE_FIND_LOGIN_ID },
+    return issueAndSendVerificationCode(this.prisma, this.mail, this.logger, {
+      email,
+      code: randomDigitCode(6),
+      purpose: PURPOSE_FIND_LOGIN_ID,
+      purgePurposes: [PURPOSE_FIND_LOGIN_ID],
+      ttlMs: FIND_ID_CODE_TTL_MS,
+      mailType: 'find-id',
+      logPrefix: '아이디 찾기',
+      throwOnMailError: false,
     });
-    await this.prisma.emailVerification.create({
-      data: { email, code, purpose: PURPOSE_FIND_LOGIN_ID, expiresAt },
-    });
-    const ttlLabel = this.formatCodeValidityForMail(FIND_ID_CODE_TTL_MS);
-    const expiry = this.codeExpiryResponseFields(FIND_ID_CODE_TTL_MS);
-    if (this.mail.isSmtpConfigured()) {
-      try {
-        await this.mail.sendVerificationCode(email, code, 'find-id', ttlLabel);
-      } catch (err) {
-        this.logger.error(err);
-        await this.prisma.emailVerification.deleteMany({
-          where: { email, purpose: PURPOSE_FIND_LOGIN_ID },
-        });
-        return {
-          sent: false,
-          message:
-            '이메일 발송에 실패했습니다. SMTP 설정을 확인하거나 잠시 후 다시 시도해 주세요.',
-        };
-      }
-      return {
-        sent: true,
-        ...expiry,
-        message: '인증번호가 발송되었습니다. 이메일을 확인해 주세요.',
-      };
-    }
-    this.logger.warn(
-      `[아이디 찾기] SMTP 미설정 — ${email} 인증번호: ${code} (유효 ${ttlLabel}, 터미널 확인)`,
-    );
-    return {
-      sent: true,
-      ...expiry,
-      message:
-        '인증번호가 발송되었습니다. 이메일을 확인해 주세요. (SMTP 미설정: 서버 터미널에 인증번호가 출력됩니다.)',
-    };
   }
 
   async findIdVerify(dto: FindIdVerifyDto) {
     const email = dto.email.trim().toLowerCase();
     const code = dto.code.trim();
-    const rec = await this.prisma.emailVerification.findFirst({
-      where: {
-        email,
-        purpose: PURPOSE_FIND_LOGIN_ID,
-        code,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!rec) {
-      throw new BadRequestException(
-        '인증번호가 올바르지 않거나 만료되었습니다.',
-      );
-    }
-    await this.prisma.emailVerification.delete({ where: { id: rec.id } });
+    await consumeVerificationCode(
+      this.prisma,
+      email,
+      code,
+      PURPOSE_FIND_LOGIN_ID,
+    );
     const user = await this.prisma.user.findUnique({
       where: { email },
       select: { loginId: true },
@@ -288,9 +184,8 @@ export class AuthService {
     if (!isPasswordPolicyCompliant(dto.newPassword)) {
       throw new BadRequestException(PASSWORD_POLICY_MESSAGE);
     }
-    const loginId = dto.loginId.trim().toLowerCase();
     const user = await this.prisma.user.findUnique({
-      where: { loginId },
+      where: { loginId: dto.loginId },
     });
     if (!user) {
       throw new BadRequestException('등록되지 않은 아이디입니다.');
@@ -310,9 +205,8 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const loginId = dto.loginId.trim().toLowerCase();
     const user = await this.prisma.user.findUnique({
-      where: { loginId },
+      where: { loginId: dto.loginId },
     });
     if (!user) {
       throw new UnauthorizedException(

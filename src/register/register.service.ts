@@ -4,9 +4,9 @@ import {
   ConflictException,
   Inject,
   Injectable,
-  InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {
   PURPOSE_REGISTER_CODE,
@@ -15,8 +15,8 @@ import {
   REGISTER_TOKEN_TTL_MS,
 } from '../auth/auth.constants';
 import {
-  codeExpiryResponseFields,
-  formatCodeValidityForMail,
+  consumeVerificationCode,
+  issueAndSendVerificationCode,
   PASSWORD_HASH,
   randomDigitCode,
 } from '../auth/auth.utils';
@@ -28,6 +28,7 @@ import { MAIL_INTERFACE } from '../mail/mail.interface';
 import type { IMailService } from '../mail/mail.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
+import { CheckLoginIdDto } from './dto/check-login-id.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterSendCodeDto } from './dto/register-send-code.dto';
 import { RegisterVerifyCodeDto } from './dto/register-verify-code.dto';
@@ -44,20 +45,10 @@ export class RegisterService {
 
   /** 회원가입 전 아이디 사용 가능 여부 (공개) */
   async checkRegisterLoginIdAvailability(
-    raw: string,
+    dto: CheckLoginIdDto,
   ): Promise<{ available: boolean }> {
-    const loginId = raw.trim().toLowerCase();
-    if (!loginId) {
-      throw new BadRequestException('아이디를 입력해 주세요.');
-    }
-    if (loginId.length < 4 || loginId.length > 20) {
-      throw new BadRequestException('아이디는 4~20자여야 합니다.');
-    }
-    if (!/^[a-zA-Z0-9_]+$/.test(loginId)) {
-      throw new BadRequestException('아이디 형식이 올바르지 않습니다.');
-    }
     const existing = await this.prisma.user.findUnique({
-      where: { loginId },
+      where: { loginId: dto.loginId },
       select: { id: true },
     });
     return { available: existing === null };
@@ -73,52 +64,80 @@ export class RegisterService {
     const email = dto.email.trim().toLowerCase();
     const loginId = dto.loginId.trim().toLowerCase();
     const token = dto.emailVerifyToken.trim().toLowerCase();
-    const emailSession = await this.prisma.emailVerification.findFirst({
-      where: {
-        email,
-        purpose: PURPOSE_REGISTER_TOKEN,
-        code: token,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+
+    const [emailSession, existingEmail, existingId, hash] = await Promise.all([
+      this.prisma.emailVerification.findFirst({
+        where: {
+          email,
+          purpose: PURPOSE_REGISTER_TOKEN,
+          code: token,
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { loginId },
+        select: { id: true },
+      }),
+      bcrypt.hash(dto.password, PASSWORD_HASH),
+    ]);
+
     if (!emailSession) {
       throw new BadRequestException('이메일 인증을 완료해 주세요.');
     }
-    const existingEmail = await this.prisma.user.findUnique({
-      where: { email },
-    });
     if (existingEmail) {
       throw new ConflictException('이미 사용 중인 이메일입니다.');
     }
-    const existingId = await this.prisma.user.findUnique({
-      where: { loginId },
-    });
     if (existingId) {
       throw new ConflictException('이미 사용 중인 아이디입니다.');
     }
-    const hash = await bcrypt.hash(dto.password, PASSWORD_HASH);
-    const user = await this.prisma.user.create({
-      data: {
-        loginId,
-        email,
-        password: hash,
-        name: dto.name.trim(),
-      },
-      select: {
-        id: true,
-        loginId: true,
-        email: true,
-        name: true,
-        createdAt: true,
-      },
-    });
-    await this.prisma.emailVerification.deleteMany({
-      where: {
-        email,
-        purpose: { in: [PURPOSE_REGISTER_CODE, PURPOSE_REGISTER_TOKEN] },
-      },
-    });
+
+    let user;
+    try {
+      user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            loginId,
+            email,
+            password: hash,
+            name: dto.name.trim(),
+          },
+          select: {
+            id: true,
+            loginId: true,
+            email: true,
+            name: true,
+            createdAt: true,
+          },
+        });
+        await tx.emailVerification.deleteMany({
+          where: {
+            email,
+            purpose: { in: [PURPOSE_REGISTER_CODE, PURPOSE_REGISTER_TOKEN] },
+          },
+        });
+        return created;
+      });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        const target = err.meta?.target as string[] | undefined;
+        if (target?.includes('email')) {
+          throw new ConflictException('이미 사용 중인 이메일입니다.');
+        }
+        if (target?.includes('loginId')) {
+          throw new ConflictException('이미 사용 중인 아이디입니다.');
+        }
+      }
+      throw err;
+    }
+
     const accessToken = this.token.signToken(user.id, user.email);
     const refreshToken = await this.token.grantRefreshToken(user.id, true);
     return { user, accessToken, refreshToken };
@@ -130,70 +149,31 @@ export class RegisterService {
     if (taken) {
       throw new ConflictException('이미 사용 중인 이메일입니다.');
     }
-    const code = randomDigitCode(6);
-    const expiresAt = new Date(Date.now() + REGISTER_CODE_TTL_MS);
-    await this.prisma.emailVerification.deleteMany({
-      where: {
-        email,
-        purpose: { in: [PURPOSE_REGISTER_CODE, PURPOSE_REGISTER_TOKEN] },
-      },
+    return issueAndSendVerificationCode(this.prisma, this.mail, this.logger, {
+      email,
+      code: randomDigitCode(6),
+      purpose: PURPOSE_REGISTER_CODE,
+      purgePurposes: [PURPOSE_REGISTER_CODE, PURPOSE_REGISTER_TOKEN],
+      ttlMs: REGISTER_CODE_TTL_MS,
+      mailType: 'register',
+      logPrefix: '회원가입 이메일',
+      throwOnMailError: true,
     });
-    await this.prisma.emailVerification.create({
-      data: { email, code, purpose: PURPOSE_REGISTER_CODE, expiresAt },
-    });
-    const ttlLabel = formatCodeValidityForMail(REGISTER_CODE_TTL_MS);
-    const expiry = codeExpiryResponseFields(REGISTER_CODE_TTL_MS);
-    if (this.mail.isSmtpConfigured()) {
-      try {
-        await this.mail.sendVerificationCode(email, code, 'register', ttlLabel);
-      } catch (err) {
-        this.logger.error(err);
-        await this.prisma.emailVerification.deleteMany({
-          where: { email, purpose: PURPOSE_REGISTER_CODE },
-        });
-        throw new InternalServerErrorException(
-          '이메일 발송에 실패했습니다. SMTP 설정을 확인하거나 잠시 후 다시 시도해 주세요.',
-        );
-      }
-      return {
-        sent: true,
-        ...expiry,
-        message: '인증번호가 발송되었습니다. 이메일을 확인해 주세요.',
-      };
-    }
-    this.logger.warn(
-      `[회원가입 이메일] SMTP 미설정 — ${email} 인증번호: ${code} (유효 ${ttlLabel}, 터미널 확인)`,
-    );
-    return {
-      sent: true,
-      ...expiry,
-      message:
-        '인증번호가 발송되었습니다. 이메일을 확인해 주세요. (SMTP 미설정: 서버 터미널에 인증번호가 출력됩니다.)',
-    };
   }
 
   async registerVerifyCode(dto: RegisterVerifyCodeDto) {
     const email = dto.email.trim().toLowerCase();
     const code = dto.code.trim();
-    const rec = await this.prisma.emailVerification.findFirst({
-      where: {
-        email,
-        purpose: PURPOSE_REGISTER_CODE,
-        code,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!rec) {
-      throw new BadRequestException(
-        '인증번호가 올바르지 않거나 만료되었습니다.',
-      );
-    }
     const taken = await this.prisma.user.findUnique({ where: { email } });
     if (taken) {
       throw new ConflictException('이미 사용 중인 이메일입니다.');
     }
-    await this.prisma.emailVerification.delete({ where: { id: rec.id } });
+    await consumeVerificationCode(
+      this.prisma,
+      email,
+      code,
+      PURPOSE_REGISTER_CODE,
+    );
     const sessionToken = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + REGISTER_TOKEN_TTL_MS);
     await this.prisma.emailVerification.deleteMany({

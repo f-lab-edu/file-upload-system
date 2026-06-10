@@ -1,10 +1,10 @@
 import { Transform } from 'class-transformer';
 import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
-export class LoginDto {
+export class CheckLoginIdDto {
   @IsString()
-  @MinLength(4, { message: '아이디를 입력해 주세요.' })
-  @MaxLength(20)
+  @MinLength(4, { message: '아이디는 4자 이상이어야 합니다.' })
+  @MaxLength(20, { message: '아이디는 20자 이하이어야 합니다.' })
   @Matches(/^[a-zA-Z0-9_]+$/, {
     message: '아이디 형식이 올바르지 않습니다.',
   })
@@ -12,8 +12,4 @@ export class LoginDto {
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
   loginId: string;
-
-  @IsString()
-  @MinLength(1)
-  password: string;
 }

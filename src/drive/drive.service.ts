@@ -5,9 +5,11 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { DriveItem, DriveItemType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFolderDto } from './dto/create-folder.dto';
@@ -56,6 +58,7 @@ function isSystemSectionRootFolder(row: {
 
 @Injectable()
 export class DriveService {
+  private readonly logger = new Logger(DriveService.name);
   private readonly uploadRoot: string;
 
   constructor(
@@ -81,7 +84,6 @@ export class DriveService {
   }
 
   async list(userId: string, parentId: string | null) {
-    await this.purgeExpiredTrash(userId);
     const items = await this.prisma.driveItem.findMany({
       where: { userId, parentId, deletedAt: null },
       orderBy: [{ type: 'desc' }, { name: 'asc' }],
@@ -101,7 +103,6 @@ export class DriveService {
   }
 
   async createFolder(userId: string, dto: CreateFolderDto) {
-    await this.purgeExpiredTrash(userId);
     const parentId = dto.parentId ?? null;
     if (parentId) {
       await this.assertFolderOwned(userId, parentId);
@@ -130,7 +131,6 @@ export class DriveService {
     parentId: string | null,
     section: 'docs' | 'images',
   ) {
-    await this.purgeExpiredTrash(userId);
     const resolvedParentId = parentId;
     if (resolvedParentId) {
       await this.assertFolderOwned(userId, resolvedParentId);
@@ -162,7 +162,6 @@ export class DriveService {
   }
 
   async deleteItem(userId: string, id: string) {
-    await this.purgeExpiredTrash(userId);
     const item = await this.prisma.driveItem.findFirst({
       where: { id, userId, deletedAt: null },
     });
@@ -209,14 +208,13 @@ export class DriveService {
 
   /** 휴지통 항목을 즉시 영구 삭제한다(하위 포함). */
   async purgeTrashItem(userId: string, id: string) {
-    await this.purgeExpiredTrash(userId);
     const item = await this.prisma.driveItem.findFirst({
       where: { id, userId, deletedAt: { not: null } },
     });
     if (!item) {
       throw new NotFoundException('항목을 찾을 수 없습니다.');
     }
-    const ids = await this.collectTrashSubtreeIds(userId, id);
+    const ids = await this.collectSubtreeIds(userId, id, true);
     const rows = await this.prisma.driveItem.findMany({
       where: { userId, id: { in: ids } },
       select: { storageKey: true },
@@ -228,8 +226,8 @@ export class DriveService {
     for (const key of keys) {
       try {
         await fs.unlink(this.filePath(userId, key));
-      } catch {
-        /* ignore missing file */
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       }
     }
     return { ok: true };
@@ -237,7 +235,6 @@ export class DriveService {
 
   /** 휴지통의 모든 파일을 영구 삭제한다. */
   async purgeAllTrash(userId: string): Promise<{ count: number }> {
-    await this.purgeExpiredTrash(userId);
     const items = await this.prisma.driveItem.findMany({
       where: {
         userId,
@@ -257,15 +254,14 @@ export class DriveService {
     for (const key of keys) {
       try {
         await fs.unlink(this.filePath(userId, key));
-      } catch {
-        /* ignore missing file */
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       }
     }
     return { count: items.length };
   }
 
   async listTrash(userId: string) {
-    await this.purgeExpiredTrash(userId);
     const items = await this.prisma.driveItem.findMany({
       where: {
         userId,
@@ -300,49 +296,46 @@ export class DriveService {
       if (!row.storageKey) continue;
       try {
         await fs.unlink(this.filePath(userId, row.storageKey));
-      } catch {
-        /* ignore missing file */
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       }
     }
-    try {
-      await fs.rm(this.userDir(userId), { recursive: true, force: true });
-    } catch {
-      /* ignore missing dir */
-    }
+    await fs.rm(this.userDir(userId), { recursive: true, force: true });
   }
 
-  private async purgeExpiredTrash(userId: string): Promise<void> {
+  @Cron(CronExpression.EVERY_HOUR)
+  async purgeAllExpiredTrash(): Promise<void> {
     const expired = await this.prisma.driveItem.findMany({
       where: {
-        userId,
         deletedAt: { not: null },
         purgeAt: { lte: new Date() },
       },
-      select: { id: true, storageKey: true },
+      select: { id: true, userId: true, storageKey: true },
     });
     if (!expired.length) return;
     const ids = expired.map((x) => x.id);
-    const keys = expired
-      .map((x) => x.storageKey)
-      .filter((x): x is string => !!x);
     await this.prisma.driveItem.deleteMany({
-      where: { userId, id: { in: ids } },
+      where: { id: { in: ids } },
     });
-    for (const key of keys) {
+    for (const row of expired) {
+      if (!row.storageKey) continue;
       try {
-        await fs.unlink(this.filePath(userId, key));
-      } catch {
-        /* ignore missing file */
+        await fs.unlink(this.filePath(row.userId, row.storageKey));
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       }
     }
+    this.logger.log(`만료된 휴지통 ${expired.length}건 정리 완료`);
   }
 
   private async collectSubtreeIds(
     userId: string,
     rootId: string,
+    trashed = false,
   ): Promise<string[]> {
+    const deletedAt = trashed ? { not: null } : null;
     const root = await this.prisma.driveItem.findFirst({
-      where: { id: rootId, userId, deletedAt: null },
+      where: { id: rootId, userId, deletedAt },
       select: { id: true },
     });
     if (!root) return [];
@@ -351,7 +344,7 @@ export class DriveService {
     while (stack.length) {
       const current = stack.pop()!;
       const children = await this.prisma.driveItem.findMany({
-        where: { userId, parentId: current, deletedAt: null },
+        where: { userId, parentId: current, deletedAt },
         select: { id: true },
       });
       for (const child of children) {
@@ -363,7 +356,6 @@ export class DriveService {
   }
 
   async moveItem(userId: string, id: string, newParentId: string | null) {
-    await this.purgeExpiredTrash(userId);
     const item = await this.prisma.driveItem.findFirst({
       where: { id, userId },
     });
@@ -415,7 +407,7 @@ export class DriveService {
     }
     await this.assertUniqueName(userId, newParentId, item.name, item.id);
 
-    const subtreeIds = await this.collectTrashSubtreeIds(userId, item.id);
+    const subtreeIds = await this.collectSubtreeIds(userId, item.id, true);
     if (!subtreeIds.length) {
       throw new NotFoundException('항목을 찾을 수 없습니다.');
     }
@@ -430,34 +422,8 @@ export class DriveService {
     });
   }
 
-  /** 휴지통에 있는 항목과 그 자손(삭제된 항목만) id 목록 */
-  private async collectTrashSubtreeIds(
-    userId: string,
-    rootId: string,
-  ): Promise<string[]> {
-    const root = await this.prisma.driveItem.findFirst({
-      where: { id: rootId, userId, deletedAt: { not: null } },
-      select: { id: true },
-    });
-    if (!root) return [];
-    const ids: string[] = [root.id];
-    const stack: string[] = [root.id];
-    while (stack.length) {
-      const current = stack.pop()!;
-      const children = await this.prisma.driveItem.findMany({
-        where: { userId, parentId: current, deletedAt: { not: null } },
-        select: { id: true },
-      });
-      for (const c of children) {
-        ids.push(c.id);
-        stack.push(c.id);
-      }
-    }
-    return ids;
-  }
 
   async renameItem(userId: string, id: string, rawName: string) {
-    await this.purgeExpiredTrash(userId);
     const name = rawName.trim().normalize('NFC');
     if (!name) {
       throw new BadRequestException('이름을 입력해 주세요.');
@@ -504,7 +470,6 @@ export class DriveService {
     id: string,
     allowDeleted = false,
   ): Promise<DriveItem> {
-    await this.purgeExpiredTrash(userId);
     const item = await this.prisma.driveItem.findFirst({
       where: {
         id,

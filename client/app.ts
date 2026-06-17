@@ -21,6 +21,9 @@ let registerLoginIdCheckedNorm: string | null = null;
 let mypageEmailVerifyToken: string | null = null;
 let mypageEmailVerifiedFor: string | null = null;
 
+let resetPasswordVerifyToken: string | null = null;
+let resetPasswordVerifiedFor: { loginId: string; email: string } | null = null;
+
 function invalidateMyPageEmailVerification(): void {
   mypageEmailVerifyToken = null;
   mypageEmailVerifiedFor = null;
@@ -94,6 +97,10 @@ const EMAIL_CODE_COUNTDOWN_SEND: Record<
   },
   'find-id-code-ttl-hint': {
     buttonId: 'btn-send-find-id-code',
+    defaultLabel: '인증번호 발송',
+  },
+  'reset-password-code-ttl-hint': {
+    buttonId: 'btn-send-reset-password-code',
     defaultLabel: '인증번호 발송',
   },
 };
@@ -299,6 +306,51 @@ function setFindIdVerifyStepVisible(visible: boolean): void {
   document
     .getElementById('find-id-verify-step')
     ?.classList.toggle('hidden', !visible);
+}
+
+function setResetPasswordVerifyStepVisible(visible: boolean): void {
+  document
+    .getElementById('reset-password-verify-step')
+    ?.classList.toggle('hidden', !visible);
+}
+
+function setResetPasswordFormVisible(visible: boolean): void {
+  document
+    .getElementById('form-recovery-password')
+    ?.classList.toggle('hidden', !visible);
+}
+
+function setResetPasswordIdentityStepVisible(visible: boolean): void {
+  document
+    .getElementById('reset-password-identity-step')
+    ?.classList.toggle('hidden', !visible);
+}
+
+function setResetPasswordVerifiedBanner(loginId: string | null): void {
+  const banner = document.getElementById('reset-password-verified-banner');
+  const text = document.getElementById('reset-password-verified-text');
+  if (!banner || !text) return;
+  if (loginId) {
+    text.textContent = `「${loginId}」 인증 완료 — 새 비밀번호를 입력해 주세요.`;
+    banner.classList.remove('hidden');
+  } else {
+    text.textContent = '';
+    banner.classList.add('hidden');
+  }
+}
+
+function invalidateResetPasswordVerification(): void {
+  resetPasswordVerifyToken = null;
+  resetPasswordVerifiedFor = null;
+  setResetPasswordIdentityStepVisible(true);
+  setResetPasswordVerifyStepVisible(false);
+  setResetPasswordFormVisible(false);
+  setResetPasswordVerifiedBanner(null);
+  const codeEl = document.getElementById(
+    'reset-password-code',
+  ) as HTMLInputElement | null;
+  if (codeEl) codeEl.value = '';
+  clearEmailCodeTtlHint('reset-password-code-ttl-hint');
 }
 
 function invalidateRegisterEmailVerification(): void {
@@ -540,8 +592,11 @@ const SESSION_RENEW_MESSAGE_SOON =
   '곧 로그인 세션이 만료됩니다. 세션을 연장할까요?';
 /** 액세스 JWT 만료 전에 연장 안내를 띄우기까지 남은 최소 시간(밀리초) */
 const ACCESS_TOKEN_WARN_BEFORE_MS = 25 * 1000;
+/** 연장 모달을 띄운 뒤 사용자가 응답하지 않으면 자동 로그아웃되기까지의 시간(초) */
+const SESSION_RENEW_COUNTDOWN_SECONDS = 10;
 
 let accessTokenExpiryWarnTimer: ReturnType<typeof setTimeout> | null = null;
+let sessionRenewCountdownTimer: ReturnType<typeof setInterval> | null = null;
 let deleteTargetItem: DriveItem | null = null;
 /** true면 휴지통에서의 영구 삭제 확인 모달 */
 let deleteIsPermanentPurge = false;
@@ -642,7 +697,9 @@ function scheduleAccessTokenExpiryWarning(): void {
   clearAccessTokenExpiryWarnTimer();
   const token = localStorage.getItem(TOKEN_KEY);
   const rt = localStorage.getItem(REFRESH_TOKEN_KEY);
-  if (!token || !rt || !currentUser) return;
+  // 로그인 직후엔 currentUser가 아직 세팅되기 전이라 가드에 걸리면 안 됨.
+  // 실제 모달 표시 단계(promptSessionRenewIfExpiringSoon)에서 currentUser를 확인함.
+  if (!token || !rt) return;
   const expMs = readAccessTokenExpMs(token);
   if (expMs == null) return;
   const delay = expMs - Date.now() - ACCESS_TOKEN_WARN_BEFORE_MS;
@@ -960,6 +1017,7 @@ function revokePreviews(): void {
 function showAuth(): void {
   getEl('notice-modal').classList.add('hidden');
   getEl('session-renew-modal').classList.add('hidden');
+  stopSessionRenewCountdown();
   noticeModalAfterClose = null;
   getEl<HTMLButtonElement>('btn-notice-confirm').textContent =
     NOTICE_CONFIRM_DEFAULT;
@@ -1349,6 +1407,31 @@ function closeNoticeModal(): void {
 
 function closeSessionRenewModal(): void {
   getEl('session-renew-modal').classList.add('hidden');
+  stopSessionRenewCountdown();
+}
+
+function stopSessionRenewCountdown(): void {
+  if (sessionRenewCountdownTimer != null) {
+    clearInterval(sessionRenewCountdownTimer);
+    sessionRenewCountdownTimer = null;
+  }
+}
+
+function startSessionRenewCountdown(): void {
+  stopSessionRenewCountdown();
+  let remaining = SESSION_RENEW_COUNTDOWN_SECONDS;
+  const secondsEl = getEl<HTMLSpanElement>('session-renew-modal-countdown-seconds');
+  secondsEl.textContent = String(remaining);
+  sessionRenewCountdownTimer = setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      stopSessionRenewCountdown();
+      secondsEl.textContent = '0';
+      declineSessionRenewal();
+      return;
+    }
+    secondsEl.textContent = String(remaining);
+  }, 1000);
 }
 
 /** 리프레시 토큰 없이 401 → 로그인 안내 */
@@ -1371,6 +1454,7 @@ function openSessionRenewModal(
   getEl<HTMLParagraphElement>('session-renew-modal-message').textContent =
     message;
   getEl('session-renew-modal').classList.remove('hidden');
+  startSessionRenewCountdown();
 }
 
 function declineSessionRenewal(): void {
@@ -1434,6 +1518,12 @@ async function acceptSessionRenewal(): Promise<void> {
 function tryHandleUnauthorized(res: Response): boolean {
   if (res.status !== 401) return false;
   if (!getEl('session-renew-modal').classList.contains('hidden')) return true;
+  // 아직 로그인하지 않은 상태(예: 앱 부팅 시 남아있던 만료 토큰)에서는 연장 모달 대신 조용히 로그인 화면으로
+  if (!currentUser) {
+    clearAuthTokens();
+    showAuth();
+    return true;
+  }
   _sessionExpiredFlowActive = true;
   if (!localStorage.getItem(REFRESH_TOKEN_KEY)) {
     _sessionExpiredFlowActive = false;
@@ -1857,11 +1947,16 @@ function openRecovery(mode: 'id' | 'password'): void {
   getEl<HTMLInputElement>('find-id-code').value = '';
   setFindIdVerifyStepVisible(false);
   clearEmailCodeTtlHint('find-id-code-ttl-hint');
+  getEl<HTMLInputElement>('reset-password-loginid').value = '';
+  getEl<HTMLInputElement>('reset-password-email').value = '';
+  getEl<HTMLInputElement>('reset-password-code').value = '';
+  invalidateResetPasswordVerification();
   getEl<HTMLFormElement>('form-recovery-password').reset();
 }
 
 function closeRecovery(): void {
   clearEmailCodeTtlHint('find-id-code-ttl-hint');
+  clearEmailCodeTtlHint('reset-password-code-ttl-hint');
   getEl('recovery-modal').classList.add('hidden');
 }
 
@@ -1998,6 +2093,125 @@ getEl<HTMLButtonElement>('btn-verify-find-id-code').addEventListener(
   },
 );
 
+getEl<HTMLButtonElement>('btn-send-reset-password-code').addEventListener(
+  'click',
+  async () => {
+    const resultEl = getEl<HTMLParagraphElement>('recovery-password-result');
+    resultEl.classList.remove('error');
+    const loginId = getEl<HTMLInputElement>(
+      'reset-password-loginid',
+    ).value.trim();
+    const email = getEl<HTMLInputElement>('reset-password-email').value.trim();
+    if (!isValidLoginId(loginId)) {
+      invalidateResetPasswordVerification();
+      resultEl.textContent =
+        loginId.length === 0
+          ? '아이디를 입력해 주세요.'
+          : '아이디는 4~20자의 영문, 숫자, 밑줄(_)만 사용할 수 있습니다.';
+      resultEl.classList.add('error');
+      return;
+    }
+    if (!isValidEmail(email)) {
+      invalidateResetPasswordVerification();
+      resultEl.textContent = '올바른 이메일 형식을 입력해 주세요.';
+      resultEl.classList.add('error');
+      return;
+    }
+    const res = await fetch('/api/auth/reset-password/send-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ loginId, email }),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      sent?: boolean;
+      message?: string;
+      expiresInMinutes?: number;
+      expiresInSeconds?: number;
+    } & ApiErrorBody;
+    if (!res.ok) {
+      invalidateResetPasswordVerification();
+      resultEl.textContent = formatApiMessage(data);
+      resultEl.classList.add('error');
+      return;
+    }
+    if (data.sent === false) {
+      invalidateResetPasswordVerification();
+      resultEl.textContent =
+        typeof data.message === 'string' ? data.message : '처리되었습니다.';
+      resultEl.classList.add('error');
+      return;
+    }
+    resetPasswordVerifyToken = null;
+    resetPasswordVerifiedFor = null;
+    resultEl.textContent = '';
+    resultEl.classList.remove('error');
+    setResetPasswordVerifyStepVisible(true);
+    setResetPasswordFormVisible(false);
+    startEmailCodeCountdown('reset-password-code-ttl-hint', {
+      expiresInMinutes: data.expiresInMinutes,
+      expiresInSeconds: data.expiresInSeconds,
+    });
+  },
+);
+
+getEl<HTMLButtonElement>('btn-verify-reset-password-code').addEventListener(
+  'click',
+  async () => {
+    const resultEl = getEl<HTMLParagraphElement>('recovery-password-result');
+    resultEl.classList.remove('error');
+    const loginId = getEl<HTMLInputElement>(
+      'reset-password-loginid',
+    ).value.trim();
+    const email = getEl<HTMLInputElement>('reset-password-email').value.trim();
+    const code = getEl<HTMLInputElement>('reset-password-code').value.trim();
+    if (!isValidLoginId(loginId) || !isValidEmail(email)) {
+      resultEl.textContent = '아이디와 이메일을 다시 확인해 주세요.';
+      resultEl.classList.add('error');
+      return;
+    }
+    if (!/^\d{6}$/.test(code)) {
+      resultEl.textContent = '인증번호 6자리를 입력해 주세요.';
+      resultEl.classList.add('error');
+      return;
+    }
+    const res = await fetch('/api/auth/reset-password/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ loginId, email, code }),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      resetPasswordToken?: string;
+    } & ApiErrorBody;
+    if (!res.ok || typeof data.resetPasswordToken !== 'string') {
+      resultEl.textContent = formatApiMessage(data) || '인증에 실패했습니다.';
+      resultEl.classList.add('error');
+      return;
+    }
+    resetPasswordVerifyToken = data.resetPasswordToken;
+    resetPasswordVerifiedFor = {
+      loginId: loginId.toLowerCase(),
+      email: email.toLowerCase(),
+    };
+    resultEl.textContent = '';
+    resultEl.classList.remove('error');
+    clearEmailCodeTtlHint('reset-password-code-ttl-hint');
+    setResetPasswordIdentityStepVisible(false);
+    setResetPasswordVerifyStepVisible(false);
+    setResetPasswordVerifiedBanner(loginId);
+    setResetPasswordFormVisible(true);
+  },
+);
+
+getEl<HTMLButtonElement>('btn-reset-password-restart').addEventListener(
+  'click',
+  () => {
+    const resultEl = getEl<HTMLParagraphElement>('recovery-password-result');
+    resultEl.textContent = '';
+    resultEl.classList.remove('error');
+    invalidateResetPasswordVerification();
+  },
+);
+
 getEl<HTMLFormElement>('form-recovery-password').addEventListener(
   'submit',
   async (e) => {
@@ -2005,8 +2219,10 @@ getEl<HTMLFormElement>('form-recovery-password').addEventListener(
     const resultEl = getEl<HTMLParagraphElement>('recovery-password-result');
     resultEl.classList.remove('error');
     const form = e.target as HTMLFormElement;
-    const fd = new FormData(form);
-    const loginId = String(fd.get('loginId') ?? '').trim();
+    const loginId = getEl<HTMLInputElement>(
+      'reset-password-loginid',
+    ).value.trim();
+    const email = getEl<HTMLInputElement>('reset-password-email').value.trim();
     const npInput = form.querySelector<HTMLInputElement>(
       'input[name="newPassword"]',
     );
@@ -2016,10 +2232,17 @@ getEl<HTMLFormElement>('form-recovery-password').addEventListener(
     const newPassword = npInput?.value ?? '';
     const confirmPassword = cfInput?.value ?? '';
     if (!isValidLoginId(loginId)) {
-      resultEl.textContent =
-        loginId.length === 0
-          ? '아이디를 입력해 주세요.'
-          : '아이디는 4~20자의 영문, 숫자, 밑줄(_)만 사용할 수 있습니다.';
+      resultEl.textContent = '아이디를 다시 확인해 주세요.';
+      resultEl.classList.add('error');
+      return;
+    }
+    if (
+      !resetPasswordVerifyToken ||
+      !resetPasswordVerifiedFor ||
+      resetPasswordVerifiedFor.loginId !== loginId.toLowerCase() ||
+      resetPasswordVerifiedFor.email !== email.toLowerCase()
+    ) {
+      resultEl.textContent = '이메일 인증을 먼저 완료해 주세요.';
       resultEl.classList.add('error');
       return;
     }
@@ -2046,6 +2269,7 @@ getEl<HTMLFormElement>('form-recovery-password').addEventListener(
         loginId,
         newPassword,
         confirmNewPassword: confirmPassword,
+        resetPasswordToken: resetPasswordVerifyToken,
       }),
     });
     const data = (await res.json().catch(() => ({}))) as {
@@ -2061,9 +2285,34 @@ getEl<HTMLFormElement>('form-recovery-password').addEventListener(
         ? data.message
         : '비밀번호가 변경되었습니다.';
     form.reset();
+    invalidateResetPasswordVerification();
     closeRecovery();
     openRecoveryResultModal('비밀번호 변경 완료', successMsg);
   },
+);
+
+const resetPasswordLoginIdInput = getEl<HTMLInputElement>(
+  'reset-password-loginid',
+);
+const resetPasswordEmailInput = getEl<HTMLInputElement>('reset-password-email');
+const invalidateResetPasswordOnIdentityChange = (): void => {
+  if (!resetPasswordVerifiedFor) return;
+  const loginId = resetPasswordLoginIdInput.value.trim().toLowerCase();
+  const email = resetPasswordEmailInput.value.trim().toLowerCase();
+  if (
+    resetPasswordVerifiedFor.loginId !== loginId ||
+    resetPasswordVerifiedFor.email !== email
+  ) {
+    invalidateResetPasswordVerification();
+  }
+};
+resetPasswordLoginIdInput.addEventListener(
+  'input',
+  invalidateResetPasswordOnIdentityChange,
+);
+resetPasswordEmailInput.addEventListener(
+  'input',
+  invalidateResetPasswordOnIdentityChange,
 );
 
 const registerFormEl = getEl<HTMLFormElement>('form-register');

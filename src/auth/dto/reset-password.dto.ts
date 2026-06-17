@@ -28,4 +28,13 @@ export class ResetPasswordDto {
     message: PASSWORD_POLICY_MESSAGE,
   })
   confirmNewPassword: string;
+
+  @IsString()
+  @Matches(/^[a-f0-9]{64}$/i, {
+    message: '인증 토큰이 올바르지 않습니다.',
+  })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  resetPasswordToken: string;
 }

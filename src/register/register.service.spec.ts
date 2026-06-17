@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
-import { MailService } from '../mail/mail.service';
+import { IMailService, MAIL_INTERFACE } from '../mail/mail.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
 import { RegisterDto } from './dto/register.dto';
@@ -43,19 +43,19 @@ describe('RegisterService', () => {
   let service: RegisterService;
   let prisma: DeepMockProxy<PrismaService>;
   let token: DeepMockProxy<TokenService>;
-  let mail: DeepMockProxy<MailService>;
+  let mail: DeepMockProxy<IMailService>;
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
     token = mockDeep<TokenService>();
-    mail = mockDeep<MailService>();
+    mail = mockDeep<IMailService>();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RegisterService,
         { provide: PrismaService, useValue: prisma },
         { provide: TokenService, useValue: token },
-        { provide: MailService, useValue: mail },
+        { provide: MAIL_INTERFACE, useValue: mail },
       ],
     }).compile();
     service = module.get<RegisterService>(RegisterService);

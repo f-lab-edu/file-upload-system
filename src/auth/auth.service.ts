@@ -7,6 +7,7 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { DriveService } from '../drive/drive.service';
 import { MAIL_INTERFACE } from '../mail/mail.interface';
@@ -16,10 +17,14 @@ import { TokenService } from '../token/token.service';
 import {
   FIND_ID_CODE_TTL_MS,
   PURPOSE_FIND_LOGIN_ID,
+  purposeResetPasswordCode,
+  purposeResetPasswordToken,
   purposeUpdateEmailCode,
   purposeUpdateEmailToken,
   REGISTER_CODE_TTL_MS,
   REGISTER_TOKEN_TTL_MS,
+  RESET_PASSWORD_CODE_TTL_MS,
+  RESET_PASSWORD_TOKEN_TTL_MS,
 } from './auth.constants';
 import {
   consumeVerificationCode,
@@ -32,6 +37,8 @@ import {
 import { FindIdSendDto } from './dto/find-id-send.dto';
 import { FindIdVerifyDto } from './dto/find-id-verify.dto';
 import { LoginDto } from './dto/login.dto';
+import { ResetPasswordSendDto } from './dto/reset-password-send.dto';
+import { ResetPasswordVerifyDto } from './dto/reset-password-verify.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UpdateMeEmailSendDto } from './dto/update-me-email-send.dto';
@@ -177,6 +184,65 @@ export class AuthService {
     return { loginId: user.loginId };
   }
 
+  async resetPasswordSendCode(dto: ResetPasswordSendDto) {
+    const email = dto.email.trim().toLowerCase();
+    const loginId = dto.loginId.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { loginId } });
+    const ok = user != null && user.email.toLowerCase() === email;
+    if (!ok) {
+      return {
+        sent: false,
+        message:
+          '입력하신 아이디·이메일과 일치하는 계정을 찾을 수 없습니다. 정보를 확인해 주세요.',
+      };
+    }
+    const codePurp = purposeResetPasswordCode(loginId);
+    const tokPurp = purposeResetPasswordToken(loginId);
+    return issueAndSendVerificationCode(this.prisma, this.mail, this.logger, {
+      email,
+      code: randomDigitCode(6),
+      purpose: codePurp,
+      purgePurposes: [codePurp, tokPurp],
+      ttlMs: RESET_PASSWORD_CODE_TTL_MS,
+      mailType: 'reset-password',
+      logPrefix: '비밀번호 재설정',
+      throwOnMailError: false,
+    });
+  }
+
+  async resetPasswordVerifyCode(dto: ResetPasswordVerifyDto) {
+    const email = dto.email.trim().toLowerCase();
+    const loginId = dto.loginId.trim().toLowerCase();
+    const code = dto.code.trim();
+    const user = await this.prisma.user.findUnique({ where: { loginId } });
+    if (!user || user.email.toLowerCase() !== email) {
+      throw new BadRequestException(
+        '입력하신 아이디·이메일과 일치하는 계정을 찾을 수 없습니다.',
+      );
+    }
+    await consumeVerificationCode(
+      this.prisma,
+      email,
+      code,
+      purposeResetPasswordCode(loginId),
+    );
+    const sessionToken = randomBytes(32).toString('hex');
+    const tokPurp = purposeResetPasswordToken(loginId);
+    const expiresAt = new Date(Date.now() + RESET_PASSWORD_TOKEN_TTL_MS);
+    await this.prisma.emailVerification.deleteMany({
+      where: { purpose: tokPurp },
+    });
+    await this.prisma.emailVerification.create({
+      data: {
+        email,
+        code: sessionToken,
+        purpose: tokPurp,
+        expiresAt,
+      },
+    });
+    return { resetPasswordToken: sessionToken };
+  }
+
   async resetPassword(dto: ResetPasswordDto) {
     if (dto.newPassword !== dto.confirmNewPassword) {
       throw new BadRequestException('비밀번호가 일치하지 않습니다.');
@@ -184,11 +250,24 @@ export class AuthService {
     if (!isPasswordPolicyCompliant(dto.newPassword)) {
       throw new BadRequestException(PASSWORD_POLICY_MESSAGE);
     }
-    const user = await this.prisma.user.findUnique({
-      where: { loginId: dto.loginId },
-    });
+    const loginId = dto.loginId.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { loginId } });
     if (!user) {
       throw new BadRequestException('등록되지 않은 아이디입니다.');
+    }
+    const tokPurp = purposeResetPasswordToken(loginId);
+    const tokenRec = await this.prisma.emailVerification.findFirst({
+      where: {
+        purpose: tokPurp,
+        code: dto.resetPasswordToken,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!tokenRec) {
+      throw new BadRequestException(
+        '인증이 만료되었습니다. 다시 인증해 주세요.',
+      );
     }
     const sameAsCurrent = await bcrypt.compare(dto.newPassword, user.password);
     if (sameAsCurrent) {
@@ -200,6 +279,14 @@ export class AuthService {
     await this.prisma.user.update({
       where: { id: user.id },
       data: { password: hash },
+    });
+    await this.prisma.emailVerification.deleteMany({
+      where: {
+        OR: [
+          { purpose: purposeResetPasswordCode(loginId) },
+          { purpose: tokPurp },
+        ],
+      },
     });
     return { ok: true, message: '비밀번호가 변경되었습니다. 로그인해 주세요.' };
   }

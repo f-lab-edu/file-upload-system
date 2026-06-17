@@ -47,20 +47,50 @@
       <p id="recovery-find-id-result" class="recovery-result message" role="status"></p>
     </div>
     <div id="recovery-reset-password" class="recovery-section hidden">
-      <p class="recovery-desc">새 비밀번호를 입력해 주세요.</p>
-      <form id="form-recovery-password" class="stack" novalidate>
+      <div id="reset-password-identity-step" class="stack">
         <label class="field">
           <span>아이디</span>
           <input
             type="text"
-            name="loginId"
-            required
+            id="reset-password-loginid"
             minlength="4"
             maxlength="20"
             pattern="[a-zA-Z0-9_]+"
             autocomplete="username"
           />
         </label>
+        <label class="field">
+          <span>이메일</span>
+          <input type="email" id="reset-password-email" autocomplete="email" />
+        </label>
+        <button type="button" class="btn secondary wide" id="btn-send-reset-password-code">인증번호 발송</button>
+        <div id="reset-password-verify-step" class="stack hidden">
+          <p
+            id="reset-password-code-ttl-hint"
+            class="field-hint email-code-ttl-hint hidden"
+            role="status"
+          ></p>
+          <label class="field">
+            <span>인증번호</span>
+            <input
+              type="text"
+              id="reset-password-code"
+              inputmode="numeric"
+              maxlength="6"
+              placeholder="6자리 숫자"
+              autocomplete="one-time-code"
+            />
+          </label>
+          <button type="button" class="btn btn-auth-submit wide" id="btn-verify-reset-password-code">
+            인증하기
+          </button>
+        </div>
+      </div>
+      <div id="reset-password-verified-banner" class="recovery-verified-banner hidden" role="status">
+        <span id="reset-password-verified-text"></span>
+        <button type="button" id="btn-reset-password-restart" class="btn btn-link">다시 인증</button>
+      </div>
+      <form id="form-recovery-password" class="stack hidden" novalidate>
         <label class="field">
           <span>새 비밀번호</span>
           <input type="password" name="newPassword" required minlength="8" autocomplete="new-password" />

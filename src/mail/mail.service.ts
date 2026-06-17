@@ -20,6 +20,7 @@ export const VERIFICATION_MAIL_SUBJECT_BY_KIND: Record<
   register: '[My-drive] 회원가입 이메일 인증번호',
   'find-id': '[My-drive] 아이디 찾기 인증번호',
   'update-email': '[My-drive] 이메일 변경 인증번호',
+  'reset-password': '[My-drive] 비밀번호 재설정 인증번호',
 };
 
 function resolveMailFrom(raw: string | undefined, smtpUser: string): string {

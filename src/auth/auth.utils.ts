@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { MailService, MailVerificationKind } from '../mail/mail.service';
+import type { IMailService, MailVerificationKind } from '../mail/mail.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   purposeUpdateEmailCode,
@@ -69,7 +69,7 @@ export function formatCodeValidityForMail(ms: number): string {
 
 export async function issueAndSendVerificationCode(
   prisma: PrismaService,
-  mail: MailService,
+  mail: IMailService,
   logger: Logger,
   params: {
     email: string;

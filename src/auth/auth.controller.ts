@@ -14,6 +14,8 @@ import { FindIdSendDto } from './dto/find-id-send.dto';
 import { FindIdVerifyDto } from './dto/find-id-verify.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshSessionDto } from './dto/refresh-session.dto';
+import { ResetPasswordSendDto } from './dto/reset-password-send.dto';
+import { ResetPasswordVerifyDto } from './dto/reset-password-verify.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UpdateMeEmailSendDto } from './dto/update-me-email-send.dto';
@@ -46,6 +48,16 @@ export class AuthController {
   @Post('find-id/verify')
   findIdVerify(@Body() dto: FindIdVerifyDto) {
     return this.auth.findIdVerify(dto);
+  }
+
+  @Post('reset-password/send-code')
+  resetPasswordSendCode(@Body() dto: ResetPasswordSendDto) {
+    return this.auth.resetPasswordSendCode(dto);
+  }
+
+  @Post('reset-password/verify')
+  resetPasswordVerifyCode(@Body() dto: ResetPasswordVerifyDto) {
+    return this.auth.resetPasswordVerifyCode(dto);
   }
 
   @Post('reset-password')

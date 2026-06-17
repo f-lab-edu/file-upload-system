@@ -108,12 +108,11 @@ export class DriveService {
       await this.assertFolderOwned(userId, parentId);
     }
     await this.assertUniqueName(userId, parentId, dto.name);
-    const sectionKey =
-      parentId === null && dto.name === SECTION_DOCS_ROOT_NAME
-        ? 'DOCS_ROOT'
-        : parentId === null && dto.name === SECTION_IMAGES_ROOT_NAME
-          ? 'IMAGES_ROOT'
-          : null;
+    let sectionKey: string | null = null;
+    if (parentId === null) {
+      if (dto.name === SECTION_DOCS_ROOT_NAME) sectionKey = 'DOCS_ROOT';
+      else if (dto.name === SECTION_IMAGES_ROOT_NAME) sectionKey = 'IMAGES_ROOT';
+    }
     return this.prisma.driveItem.create({
       data: {
         name: dto.name,
